@@ -11,8 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -69,11 +73,42 @@ private fun HomeScaffold(
         floatingActionButton = { HomeFab(onClick = onNavigateToReporte) },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
-        HomeEmptyState(
-            paddingValues = paddingValues,
-            onNavigateToReporte = onNavigateToReporte,
-            onNavigateToDetalle = onNavigateToDetalle
+        val mockIncidentes = listOf(
+            ec.edu.puce.barrioseguro.domain.model.Incidente(
+                id = 1,
+                tipo = "Robo",
+                descripcion = "Robo a mano armada en la esquina.",
+                latitud = -0.22985,
+                longitud = -78.52495,
+                fotoUri = null,
+                timestamp = System.currentTimeMillis(),
+                estado = "Pendiente"
+            ),
+            ec.edu.puce.barrioseguro.domain.model.Incidente(
+                id = 2,
+                tipo = "Accidente de Tránsito",
+                descripcion = "Choque entre dos autos cerca del parque.",
+                latitud = -0.23112,
+                longitud = -78.52012,
+                fotoUri = null,
+                timestamp = System.currentTimeMillis() - 86400000,
+                estado = "Atendido"
+            )
         )
+
+        if (mockIncidentes.isEmpty()) {
+            HomeEmptyState(
+                paddingValues = paddingValues,
+                onNavigateToReporte = onNavigateToReporte,
+                onNavigateToDetalle = onNavigateToDetalle
+            )
+        } else {
+            HomeListState(
+                paddingValues = paddingValues,
+                incidentes = mockIncidentes,
+                onNavigateToDetalle = onNavigateToDetalle
+            )
+        }
     }
 }
 
@@ -239,6 +274,95 @@ private fun HomeEmptyState(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeListState(
+    paddingValues: PaddingValues,
+    incidentes: List<ec.edu.puce.barrioseguro.domain.model.Incidente>,
+    onNavigateToDetalle: (Int) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(paddingValues),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        items(incidentes) { incidente ->
+            IncidenteItem(
+                incidente = incidente,
+                onClick = { onNavigateToDetalle(incidente.id) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun IncidenteItem(
+    incidente: ec.edu.puce.barrioseguro.domain.model.Incidente,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = incidente.tipo,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Surface(
+                    color = if (incidente.estado == "Pendiente") MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Text(
+                        text = incidente.estado,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (incidente.estado == "Pendiente") MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+            }
+            Text(
+                text = incidente.descripcion,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.LocationOn,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Lat: ${incidente.latitud}, Lng: ${incidente.longitud}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
