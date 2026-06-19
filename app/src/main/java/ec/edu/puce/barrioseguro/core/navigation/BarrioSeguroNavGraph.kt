@@ -8,6 +8,8 @@ import androidx.navigation.toRoute
 import ec.edu.puce.barrioseguro.presentation.detail.DetalleScreen
 import ec.edu.puce.barrioseguro.presentation.home.HomeScreen
 import ec.edu.puce.barrioseguro.presentation.report.ReporteScreen
+import ec.edu.puce.barrioseguro.presentation.map.MapScreen
+import ec.edu.puce.barrioseguro.presentation.profile.ProfileScreen
 
 @Composable
 fun BarrioSeguroNavGraph() {
@@ -24,6 +26,20 @@ fun BarrioSeguroNavGraph() {
                 },
                 onNavigateToDetalle = { incidenteId ->
                     navController.navigate(DetalleRoute(incidenteId))
+                },
+                onNavigateToMap = {
+                    navController.navigate(MapRoute) {
+                        popUpTo(HomeRoute) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onNavigateToProfile = {
+                    navController.navigate(ProfileRoute) {
+                        popUpTo(HomeRoute) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
             )
         }
@@ -32,6 +48,20 @@ fun BarrioSeguroNavGraph() {
             ReporteScreen(
                 onNavigateBack = {
                     navController.popBackStack()
+                },
+                onNavigateToMap = {
+                    navController.navigate(MapRoute) {
+                        popUpTo(HomeRoute) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onNavigateToProfile = {
+                    navController.navigate(ProfileRoute) {
+                        popUpTo(HomeRoute) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
             )
         }
@@ -43,6 +73,56 @@ fun BarrioSeguroNavGraph() {
                 incidenteId = route.incidenteId,
                 onNavigateBack = {
                     navController.popBackStack()
+                },
+                onNavigateToMap = {
+                    navController.navigate(MapRoute) {
+                        popUpTo(HomeRoute) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onNavigateToProfile = {
+                    navController.navigate(ProfileRoute) {
+                        popUpTo(HomeRoute) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
+        }
+
+        composable<MapRoute> {
+            MapScreen(
+                onNavigateToHome = {
+                    navController.navigate(HomeRoute) {
+                        popUpTo(HomeRoute) { inclusive = false }
+                        launchSingleTop = true
+                    }
+                },
+                onNavigateToProfile = {
+                    navController.navigate(ProfileRoute) {
+                        popUpTo(HomeRoute) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
+        }
+
+        composable<ProfileRoute> {
+            ProfileScreen(
+                onNavigateToHome = {
+                    navController.navigate(HomeRoute) {
+                        popUpTo(HomeRoute) { inclusive = false }
+                        launchSingleTop = true
+                    }
+                },
+                onNavigateToMap = {
+                    navController.navigate(MapRoute) {
+                        popUpTo(HomeRoute) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
             )
         }

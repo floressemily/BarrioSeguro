@@ -65,7 +65,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ec.edu.puce.barrioseguro.presentation.viewmodel.DetalleViewModel
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModelFactory
-import ec.edu.puce.barrioseseguro.presentation.common.IncidenteUiState
+import ec.edu.puce.barrioseguro.presentation.common.IncidenteUiState
 import ec.edu.puce.barrioseguro.domain.model.Incidente
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
@@ -73,7 +73,9 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun DetalleScreen(
     incidenteId: Int,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToMap: () -> Unit,
+    onNavigateToProfile: () -> Unit
 ) {
     val viewModel: DetalleViewModel = viewModel(
         factory = IncidenteViewModelFactory()
@@ -112,7 +114,9 @@ fun DetalleScreen(
         is IncidenteUiState.Success -> {
             DetalleScaffold(
                 incidente = state.data,
-                onNavigateBack = onNavigateBack
+                onNavigateBack = onNavigateBack,
+                onNavigateToMap = onNavigateToMap,
+                onNavigateToProfile = onNavigateToProfile
             )
         }
     }
@@ -122,7 +126,9 @@ fun DetalleScreen(
 @Composable
 private fun DetalleScaffold(
     incidente: Incidente,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToMap: () -> Unit,
+    onNavigateToProfile: () -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -173,13 +179,13 @@ private fun DetalleScaffold(
                 )
                 NavigationBarItem(
                     selected = false,
-                    onClick = { },
+                    onClick = onNavigateToMap,
                     icon = { Icon(Icons.Filled.Map, contentDescription = "Mapa") },
                     label = { Text("Mapa") }
                 )
                 NavigationBarItem(
                     selected = false,
-                    onClick = { },
+                    onClick = onNavigateToProfile,
                     icon = { Icon(Icons.Filled.Person, contentDescription = "Perfil") },
                     label = { Text("Perfil") }
                 )
