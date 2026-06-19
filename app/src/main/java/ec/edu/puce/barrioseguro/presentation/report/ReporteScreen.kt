@@ -9,27 +9,29 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -37,7 +39,8 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -52,12 +55,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.LocationServices
@@ -68,9 +73,6 @@ import ec.edu.puce.barrioseguro.data.repository.IncidenteRepositoryLocal
 import ec.edu.puce.barrioseguro.domain.model.Incidente
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModel
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModelFactory
-
-// Rojo indicado en los requisitos
-private val ColorRojoEnviar = Color(0xFFE53935)
 
 val TIPOS_INCIDENTE = listOf(
     "Robo",
@@ -196,7 +198,7 @@ fun ReporteScreen(
                 descripcion = descripcion,
                 latitud = latitud ?: 0.0,
                 longitud = longitud ?: 0.0,
-                fotoUri = null, // TakePicturePreview devuelve Bitmap, no URI
+                fotoUri = null,
                 timestamp = System.currentTimeMillis(),
                 estado = "activo"
             )
@@ -230,34 +232,53 @@ private fun ReporteScaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            text = "Nuevo Reporte",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Incidente comunitario",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        text = "Reportar Incidente",
+                        fontWeight = FontWeight.Bold
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Volver",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            contentDescription = "Volver"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { }) {
+                        Icon(
+                            imageVector = Icons.Filled.Notifications,
+                            contentDescription = "Notificaciones"
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             )
+        },
+        bottomBar = {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateBack,
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "Inicio") },
+                    label = { Text("Inicio") }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = { },
+                    icon = { Icon(Icons.Filled.Map, contentDescription = "Mapa") },
+                    label = { Text("Mapa") }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = { },
+                    icon = { Icon(Icons.Filled.Person, contentDescription = "Perfil") },
+                    label = { Text("Perfil") }
+                )
+            }
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
@@ -272,8 +293,7 @@ private fun ReporteScaffold(
             onTipoChange = onTipoChange,
             onDescripcionChange = onDescripcionChange,
             onTomarFotoClick = onTomarFotoClick,
-            onEnviarClick = onEnviarClick,
-            onCancelarClick = onNavigateBack
+            onEnviarClick = onEnviarClick
         )
     }
 }
@@ -295,8 +315,7 @@ private fun ReporteForm(
     onTipoChange: (String) -> Unit,
     onDescripcionChange: (String) -> Unit,
     onTomarFotoClick: () -> Unit,
-    onEnviarClick: () -> Unit,
-    onCancelarClick: () -> Unit
+    onEnviarClick: () -> Unit
 ) {
     val formularioValido = tipo.isNotBlank() && descripcion.isNotBlank()
 
@@ -304,13 +323,16 @@ private fun ReporteForm(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // ── 1. Área de foto ──────────────────────────────────────────────────
+        FotoSection(
+            fotoBitmap = fotoBitmap,
+            onTomarFotoClick = onTomarFotoClick
+        )
 
-        // ── Sección: Tipo de incidente (Dropdown) ───────────────────────────
-        SeccionTitulo(texto = "Tipo de incidente")
-
+        // ── 2. Dropdown de tipo de incidente ───────────────────────────────
         var expanded by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(
             expanded = expanded,
@@ -320,12 +342,14 @@ private fun ReporteForm(
                 value = tipo,
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Selecciona el tipo") },
+                placeholder = {
+                    Text("Seleccionar tipo de incidente", color = Color.Gray)
+                },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .menuAnchor(),
-                shape = MaterialTheme.shapes.medium
+                shape = RoundedCornerShape(8.dp)
             )
             ExposedDropdownMenu(
                 expanded = expanded,
@@ -343,69 +367,45 @@ private fun ReporteForm(
             }
         }
 
-        // ── Sección: Descripción ────────────────────────────────────────────
-        SeccionTitulo(texto = "Descripción del incidente")
-
+        // ── 3. Descripción ──────────────────────────────────────────────────
         OutlinedTextField(
             value = descripcion,
             onValueChange = onDescripcionChange,
-            label = { Text("¿Qué ocurrió?") },
+            placeholder = { Text("Describe el incidente...", color = Color.Gray) },
             minLines = 3,
+            maxLines = 6,
             modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium
+            shape = RoundedCornerShape(8.dp)
         )
 
-        // ── Sección: Foto ───────────────────────────────────────────────────
-        SeccionTitulo(texto = "Foto del incidente")
-
-        FotoSection(
-            fotoBitmap = fotoBitmap,
-            onTomarFotoClick = onTomarFotoClick
-        )
-
-        // ── Sección: Ubicación GPS ──────────────────────────────────────────
-        SeccionTitulo(texto = "Ubicación GPS")
-
+        // ── 4. Ubicación GPS ────────────────────────────────────────────────
         UbicacionSection(
             latitud = latitud,
             longitud = longitud,
             ubicacionError = ubicacionError
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // ── Botón Enviar ────────────────────────────────────────────────────
+        // ── 5. Botón Enviar ──────────────────────────────────────────────────
         Button(
             onClick = onEnviarClick,
             enabled = formularioValido,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = ColorRojoEnviar,
+                containerColor = Color(0xFFE53935),
+                disabledContainerColor = Color(0xFFE53935).copy(alpha = 0.5f),
                 contentColor = Color.White,
-                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-            ),
-            shape = MaterialTheme.shapes.medium
+                disabledContentColor = Color.White
+            )
         ) {
             Text(
                 text = "Enviar Reporte",
-                style = MaterialTheme.typography.labelLarge,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
         }
-
-        OutlinedButton(
-            onClick = onCancelarClick,
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium
-        ) {
-            Text(
-                text = "Cancelar",
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
@@ -418,66 +418,39 @@ private fun FotoSection(
     fotoBitmap: Bitmap?,
     onTomarFotoClick: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFE0E0E0))
+            .clickable { onTomarFotoClick() },
+        contentAlignment = Alignment.Center
+    ) {
         if (fotoBitmap != null) {
-            Card(
-                shape = MaterialTheme.shapes.large,
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            Image(
+                bitmap = fotoBitmap.asImageBitmap(),
+                contentDescription = "Foto del incidente",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Image(
-                    bitmap = fotoBitmap.asImageBitmap(),
-                    contentDescription = "Foto del incidente",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
+                Icon(
+                    imageVector = Icons.Filled.CameraAlt,
+                    contentDescription = null,
+                    tint = Color.DarkGray,
+                    modifier = Modifier.size(48.dp)
+                )
+                Text(
+                    text = "Toca para añadir una foto",
+                    color = Color.DarkGray,
+                    fontSize = 14.sp
                 )
             }
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = MaterialTheme.shapes.large
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.CameraAlt,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(48.dp)
-                    )
-                    Text(
-                        text = "Sin foto",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        OutlinedButton(
-            onClick = onTomarFotoClick,
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium
-        ) {
-            Icon(
-                imageVector = Icons.Filled.CameraAlt,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = if (fotoBitmap != null) "Cambiar foto" else "Tomar foto",
-                style = MaterialTheme.typography.labelLarge
-            )
         }
     }
 }
@@ -492,74 +465,29 @@ private fun UbicacionSection(
     longitud: Double?,
     ubicacionError: String?
 ) {
-    Card(
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        ),
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Filled.LocationOn,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.size(22.dp)
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                when {
-                    ubicacionError != null -> {
-                        Text(
-                            text = ubicacionError,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                    latitud != null && longitud != null -> {
-                        Text(
-                            text = "Ubicación obtenida",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Text(
-                            text = "Lat: ${"%.6f".format(latitud)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Text(
-                            text = "Lon: ${"%.6f".format(longitud)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
-                    else -> {
-                        Text(
-                            text = "Obteniendo ubicación GPS...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-            }
+        Icon(
+            imageVector = Icons.Filled.LocationOn,
+            contentDescription = null,
+            tint = Color(0xFFE53935),
+            modifier = Modifier.size(20.dp)
+        )
+        val textoUbicacion = when {
+            latitud != null && longitud != null -> "Quito, Ecuador"
+            ubicacionError != null -> ubicacionError
+            else -> "Obteniendo ubicación..."
         }
+        Text(
+            text = textoUbicacion,
+            color = Color.DarkGray,
+            fontSize = 14.sp
+        )
     }
-}
-
-// ---------------------------------------------------------------------------
-// Componente auxiliar: título de sección
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun SeccionTitulo(texto: String) {
-    Text(
-        text = texto,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface
-    )
 }

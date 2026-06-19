@@ -1,5 +1,7 @@
 package ec.edu.puce.barrioseguro.presentation.home
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,18 +16,24 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -40,8 +48,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ec.edu.puce.barrioseguro.data.local.database.BarrioSeguroDatabase
 import ec.edu.puce.barrioseguro.data.repository.IncidenteRepositoryLocal
@@ -68,35 +77,42 @@ fun HomeScreen(
         factory = IncidenteViewModelFactory(repository)
     )
 
-    LaunchedEffect(Unit) {
-        // DATOS DE PRUEBA - remover antes de entrega final
-        val incidentePrueba1 = Incidente(
-            id = 0,
-            tipo = "Robo",
-            descripcion = "Robo de celular en la esquina del parque",
-            latitud = -0.2295,
-            longitud = -78.5243,
-            fotoUri = null,
-            timestamp = System.currentTimeMillis() - 600000,
-            estado = "activo"
-        )
-        val incidentePrueba2 = Incidente(
-            id = 0,
-            tipo = "Actividad sospechosa",
-            descripcion = "Persona merodeando el edificio hace 30 minutos",
-            latitud = -0.2301,
-            longitud = -78.5251,
-            fotoUri = null,
-            timestamp = System.currentTimeMillis() - 1800000,
-            estado = "en revision"
-        )
-        viewModel.guardarIncidente(incidentePrueba1)
-        viewModel.guardarIncidente(incidentePrueba2)
+    val uiState by viewModel.uiState.collectAsState()
 
+    LaunchedEffect(Unit) {
         viewModel.cargarIncidentes()
     }
 
-    val uiState by viewModel.uiState.collectAsState()
+    // DATOS DE PRUEBA condicionados
+    LaunchedEffect(uiState) {
+        if (uiState is IncidenteUiState.Success) {
+            val list = (uiState as IncidenteUiState.Success<List<Incidente>>).data
+            if (list.isEmpty()) {
+                val incidentePrueba1 = Incidente(
+                    id = 0,
+                    tipo = "Robo",
+                    descripcion = "Robo de celular en la esquina del parque",
+                    latitud = -0.2295,
+                    longitud = -78.5243,
+                    fotoUri = null,
+                    timestamp = System.currentTimeMillis() - 600000,
+                    estado = "activo"
+                )
+                val incidentePrueba2 = Incidente(
+                    id = 0,
+                    tipo = "Actividad sospechosa",
+                    descripcion = "Persona merodeando el edificio hace 30 minutos",
+                    latitud = -0.2301,
+                    longitud = -78.5251,
+                    fotoUri = null,
+                    timestamp = System.currentTimeMillis() - 1800000,
+                    estado = "en revision"
+                )
+                viewModel.guardarIncidente(incidentePrueba1)
+                viewModel.guardarIncidente(incidentePrueba2)
+            }
+        }
+    }
 
     HomeScaffold(
         uiState = uiState,
@@ -119,12 +135,76 @@ private fun HomeScaffold(
     Scaffold(
         topBar = { HomeTopBar() },
         floatingActionButton = { HomeFab(onClick = onNavigateToReporte) },
+        bottomBar = { HomeBottomBar() },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         HomeContent(
             uiState = uiState,
             paddingValues = paddingValues,
             onNavigateToDetalle = onNavigateToDetalle
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeTopBar() {
+    TopAppBar(
+        title = {
+            Text(
+                text = "BarrioSeguro",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        actions = {
+            IconButton(onClick = { }) {
+                Icon(
+                    imageVector = Icons.Filled.Notifications,
+                    contentDescription = "Notificaciones"
+                )
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    )
+}
+
+@Composable
+private fun HomeFab(onClick: () -> Unit) {
+    FloatingActionButton(
+        onClick = onClick,
+        containerColor = Color(0xFFE53935),
+        contentColor = Color.White,
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Add,
+            contentDescription = "Nuevo reporte"
+        )
+    }
+}
+
+@Composable
+private fun HomeBottomBar() {
+    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+        NavigationBarItem(
+            selected = true,
+            onClick = { },
+            icon = { Icon(Icons.Filled.Home, contentDescription = "Inicio") },
+            label = { Text("Inicio") }
+        )
+        NavigationBarItem(
+            selected = false,
+            onClick = { },
+            icon = { Icon(Icons.Filled.Map, contentDescription = "Mapa") },
+            label = { Text("Mapa") }
+        )
+        NavigationBarItem(
+            selected = false,
+            onClick = { },
+            icon = { Icon(Icons.Filled.Person, contentDescription = "Perfil") },
+            label = { Text("Perfil") }
         )
     }
 }
@@ -139,35 +219,53 @@ private fun HomeContent(
     paddingValues: PaddingValues,
     onNavigateToDetalle: (Int) -> Unit
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(paddingValues)
     ) {
-        when (uiState) {
-            is IncidenteUiState.Loading -> {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
+        // MAPA PLACEHOLDER
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+                .background(Color(0xFFE0E0E0)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Mapa Placeholder",
+                color = Color.Gray,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+        }
 
-            is IncidenteUiState.Error -> {
-                Text(
-                    text = uiState.message,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(horizontal = 24.dp)
-                )
-            }
+        Box(modifier = Modifier.weight(1f)) {
+            when (uiState) {
+                is IncidenteUiState.Loading -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
 
-            is IncidenteUiState.Success -> {
-                IncidenteList(
-                    incidentes = uiState.data,
-                    onNavigateToDetalle = onNavigateToDetalle
-                )
+                is IncidenteUiState.Error -> {
+                    Text(
+                        text = uiState.message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(horizontal = 24.dp)
+                    )
+                }
+
+                is IncidenteUiState.Success -> {
+                    IncidenteList(
+                        incidentes = uiState.data,
+                        onNavigateToDetalle = onNavigateToDetalle
+                    )
+                }
             }
         }
     }
@@ -189,12 +287,31 @@ private fun IncidenteList(
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = "Alertas Recientes",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Alertas Recientes",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFFF5F5F5), RoundedCornerShape(20.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "Recientes ▼",
+                    fontSize = 12.sp,
+                    color = Color.DarkGray
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -219,6 +336,22 @@ private fun IncidenteList(
                         incidente = incidente,
                         onClick = { onNavigateToDetalle(incidente.id) }
                     )
+                }
+                
+                if (incidentes.size > 3) {
+                    item {
+                        Text(
+                            text = "Ver más alertas",
+                            color = Color(0xFFE53935),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp)
+                                .clickable { },
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
         }
@@ -260,135 +393,55 @@ private fun IncidenteCard(
 
     Card(
         onClick = onClick,
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = Color(0xFF1E1E1E)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Ícono de tipo
-            Icon(
-                imageVector = Icons.Filled.Warning,
-                contentDescription = null,
-                tint = Color(0xFFE53935),
-                modifier = Modifier.size(36.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(Color(0xFFE53935), RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column {
                 Text(
                     text = incidente.tipo,
-                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    fontSize = 14.sp,
+                    color = Color.White
                 )
                 Text(
                     text = coordenadasBarrio,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = incidente.descripcion,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = tiempoRelativo,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
+                    fontSize = 12.sp,
+                    color = Color.Gray
                 )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.weight(1f))
 
-            // Badge de estado
-            EstadoBadge(estado = incidente.estado)
+            Text(
+                text = tiempoRelativo,
+                fontSize = 11.sp,
+                color = Color.Gray,
+                textAlign = TextAlign.End
+            )
         }
     }
-}
-
-@Composable
-private fun EstadoBadge(estado: String) {
-    val (bgColor, textColor) = when (estado.lowercase()) {
-        "activo"    -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-        "resuelto"  -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
-        else        -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
-    }
-    Card(
-        shape = MaterialTheme.shapes.small,
-        colors = CardDefaults.cardColors(containerColor = bgColor)
-    ) {
-        Text(
-            text = estado,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = textColor,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-        )
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Componentes reutilizables
-// ---------------------------------------------------------------------------
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun HomeTopBar() {
-    TopAppBar(
-        title = {
-            Column {
-                Text(
-                    text = "BarrioSeguro",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Alertas comunitarias",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        actions = {
-            IconButton(onClick = { /* futuro: notificaciones */ }) {
-                Icon(
-                    imageVector = Icons.Filled.Notifications,
-                    contentDescription = "Notificaciones",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            scrolledContainerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    )
-}
-
-@Composable
-private fun HomeFab(onClick: () -> Unit) {
-    ExtendedFloatingActionButton(
-        onClick = onClick,
-        icon = {
-            Icon(
-                imageVector = Icons.Filled.Add,
-                contentDescription = null
-            )
-        },
-        text = { Text("Nuevo reporte") },
-        containerColor = Color(0xFFE53935),
-        contentColor = Color.White
-    )
 }

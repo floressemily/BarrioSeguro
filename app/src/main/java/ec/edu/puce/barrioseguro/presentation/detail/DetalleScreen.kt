@@ -1,11 +1,9 @@
 package ec.edu.puce.barrioseguro.presentation.detail
 
 import android.content.Intent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,28 +17,32 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,27 +53,19 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import ec.edu.puce.barrioseguro.data.local.database.BarrioSeguroDatabase
 import ec.edu.puce.barrioseguro.data.repository.IncidenteRepositoryLocal
 import ec.edu.puce.barrioseguro.domain.model.Incidente
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
-
-// Color solicitado en los requisitos
-private val ColorRojo = Color(0xFFE53935)
-private val ColorGrisOscuro = Color(0xFF616161)
-private val ColorGrisClaro = Color(0xFFBDBDBD)
-
-// ---------------------------------------------------------------------------
-// Entrada pública — firma fija para el NavGraph
-// ---------------------------------------------------------------------------
 
 @Composable
 fun DetalleScreen(
@@ -105,10 +99,12 @@ fun DetalleScreen(
     when {
         cargando -> {
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF121212)),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = ColorRojo)
+                CircularProgressIndicator(color = Color(0xFFE53935))
             }
         }
 
@@ -116,6 +112,7 @@ fun DetalleScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(Color(0xFF121212))
                     .padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -136,10 +133,6 @@ fun DetalleScreen(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Scaffold principal
-// ---------------------------------------------------------------------------
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DetalleScaffold(
@@ -151,40 +144,63 @@ private fun DetalleScaffold(
     val context = LocalContext.current
 
     Scaffold(
+        containerColor = Color(0xFF121212),
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            text = "Detalle del incidente",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Incidente #${incidente.id}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        text = "Detalle del incidente",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        fontSize = 18.sp
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Volver",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = Color.White
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                actions = {
+                    IconButton(onClick = { }) {
+                        Icon(
+                            imageVector = Icons.Filled.Notifications,
+                            contentDescription = "Notificaciones",
+                            tint = Color.White
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = Color(0xFF121212)
                 )
             )
         },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        containerColor = MaterialTheme.colorScheme.background
+        bottomBar = {
+            NavigationBar(containerColor = Color(0xFF121212)) {
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateBack,
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "Inicio") },
+                    label = { Text("Inicio") }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = { },
+                    icon = { Icon(Icons.Filled.Map, contentDescription = "Mapa") },
+                    label = { Text("Mapa") }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = { },
+                    icon = { Icon(Icons.Filled.Person, contentDescription = "Perfil") },
+                    label = { Text("Perfil") }
+                )
+            }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
         DetalleBody(
             incidente = incidente,
@@ -206,10 +222,6 @@ private fun DetalleScaffold(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Cuerpo principal con scroll
-// ---------------------------------------------------------------------------
-
 @Composable
 private fun DetalleBody(
     incidente: Incidente,
@@ -222,374 +234,231 @@ private fun DetalleBody(
             .fillMaxSize()
             .padding(paddingValues)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Foto o placeholder
-        FotoSection(fotoUrl = incidente.fotoUri)
-
-        // 2. Chip de tipo con fondo rojo
-        TipoChip(tipo = incidente.tipo)
-
-        // 3. Descripción completa
-        DescripcionSection(descripcion = incidente.descripcion)
-
-        // 4. "Ocurrió hace X min"
-        TiempoTranscurrido(timestamp = incidente.timestamp)
-
-        // 5 & 6 & 7. Sección de estado con barra de progreso
-        EstadoSection(estado = incidente.estado)
-
-        // 8. Coordenadas GPS
-        UbicacionSection(latitud = incidente.latitud, longitud = incidente.longitud)
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // 9. Botones de acción
-        AccionesSection(
-            tipo = incidente.tipo,
-            onCompartir = onCompartir,
-            onSeguirAlerta = onSeguirAlerta
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Foto o placeholder
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun FotoSection(fotoUrl: String?) {
-    AnimatedVisibility(
-        visible = true,
-        enter = fadeIn() + slideInVertically()
-    ) {
-        if (fotoUrl != null) {
-            AsyncImage(
-                model = fotoUrl,
-                contentDescription = "Foto del incidente",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(12.dp))
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+        // IMAGEN SUPERIOR CON BADGE
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+        ) {
+            if (incidente.fotoUri != null) {
+                AsyncImage(
+                    model = incidente.fotoUri,
+                    contentDescription = "Foto del incidente",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF2A2A2A)),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Image,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(52.dp)
-                    )
-                    Text(
-                        text = "Sin foto disponible",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = Color.Gray,
+                        modifier = Modifier.size(48.dp)
                     )
                 }
             }
-        }
-    }
-}
 
-// ---------------------------------------------------------------------------
-// Chip de tipo con fondo rojo #E53935
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun TipoChip(tipo: String) {
-    Box(
-        modifier = Modifier
-            .background(
-                color = ColorRojo,
-                shape = RoundedCornerShape(20.dp)
-            )
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-    ) {
-        Text(
-            text = tipo,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Descripción completa
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun DescripcionSection(descripcion: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            text = "Descripción",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = descripcion,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Tiempo transcurrido
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun TiempoTranscurrido(timestamp: Long) {
-    val ahora = System.currentTimeMillis()
-    val diffMs = ahora - timestamp
-    val textoTiempo = when {
-        diffMs < 0 -> "justo ahora"
-        diffMs < TimeUnit.MINUTES.toMillis(1) -> "hace menos de 1 min"
-        diffMs < TimeUnit.HOURS.toMillis(1) -> {
-            val mins = TimeUnit.MILLISECONDS.toMinutes(diffMs)
-            "hace $mins min"
-        }
-        diffMs < TimeUnit.DAYS.toMillis(1) -> {
-            val hrs = TimeUnit.MILLISECONDS.toHours(diffMs)
-            "hace $hrs h"
-        }
-        else -> {
-            val days = TimeUnit.MILLISECONDS.toDays(diffMs)
-            "hace $days día(s)"
-        }
-    }
-
-    Text(
-        text = "Ocurrió $textoTiempo",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-}
-
-// ---------------------------------------------------------------------------
-// Sección de estado con barra de progreso de 3 pasos
-// ---------------------------------------------------------------------------
-
-private val PASOS_ESTADO = listOf("Reportado", "En revisión", "Resuelto")
-
-@Composable
-private fun EstadoSection(estado: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            text = "Estado",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        BarraProgreso(estadoActual = estado)
-    }
-}
-
-@Composable
-private fun BarraProgreso(estadoActual: String) {
-    // Mapeo flexible: "activo" → índice 0 (Reportado), "revisión" → 1, "resuelto" → 2
-    val indiceActual = when {
-        estadoActual.contains("resuelto", ignoreCase = true) -> 2
-        estadoActual.contains("revision", ignoreCase = true) ||
-                estadoActual.contains("revisión", ignoreCase = true) ||
-                estadoActual.contains("revision", ignoreCase = true) -> 1
-        else -> 0 // "activo", "reportado", o cualquier otro
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        PASOS_ESTADO.forEachIndexed { index, paso ->
-            val esActual = index == indiceActual
-            val esPasado = index < indiceActual
-            val esFuturo = index > indiceActual
-
-            // Círculo del paso
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.weight(1f)
+            // Badge superpuesto abajo izquierda
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(12.dp)
+                    .background(Color(0xFFE53935), RoundedCornerShape(20.dp))
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(if (esActual) 30.dp else 24.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when {
-                                esActual -> ColorRojo
-                                esPasado -> ColorGrisOscuro
-                                else -> ColorGrisClaro
-                            }
-                        )
-                        .border(
-                            width = if (esActual) 2.dp else 1.dp,
-                            color = if (esFuturo) ColorGrisClaro else Color.Transparent,
-                            shape = CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (esPasado) {
-                        Icon(
-                            imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(14.dp)
-                        )
+                Text(
+                    text = incidente.tipo,
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            // HEADER TÍTULO
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = incidente.descripcion,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+
+                val tiempoRelativo = remember(incidente.timestamp) {
+                    val diffMs = System.currentTimeMillis() - incidente.timestamp
+                    when {
+                        diffMs < TimeUnit.MINUTES.toMillis(1) -> "justo ahora"
+                        diffMs < TimeUnit.HOURS.toMillis(1) -> "hace ${TimeUnit.MILLISECONDS.toMinutes(diffMs)} min"
+                        diffMs < TimeUnit.DAYS.toMillis(1) -> "hace ${TimeUnit.MILLISECONDS.toHours(diffMs)} horas"
+                        else -> "hace ${TimeUnit.MILLISECONDS.toDays(diffMs)} días"
                     }
                 }
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.LocationOn,
+                        contentDescription = null,
+                        tint = Color(0xFFE53935),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Quito, Ecuador",
+                        fontSize = 13.sp,
+                        color = Color.Gray
+                    )
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    Icon(
+                        imageVector = Icons.Filled.Schedule,
+                        contentDescription = null,
+                        tint = Color.Gray,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = tiempoRelativo,
+                        fontSize = 13.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+
+            // SECCIÓN DESCRIPCIÓN
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = paso,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = if (esActual) FontWeight.Bold else FontWeight.Normal,
-                    color = when {
-                        esActual -> ColorRojo
-                        esPasado -> ColorGrisOscuro
-                        else -> ColorGrisClaro
+                    text = "Descripción",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp,
+                    color = Color.White
+                )
+                Text(
+                    text = incidente.descripcion,
+                    fontSize = 14.sp,
+                    color = Color.LightGray
+                )
+            }
+
+            // SECCIÓN ESTADO
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Estado",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp,
+                    color = Color.White
+                )
+
+                val indiceActual = when {
+                    incidente.estado.contains("resuelto", ignoreCase = true) -> 2
+                    incidente.estado.contains("revision", ignoreCase = true) ||
+                    incidente.estado.contains("revisión", ignoreCase = true) -> 1
+                    else -> 0
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val estados = listOf("Reportado", "En revisión", "Resuelto")
+                    estados.forEachIndexed { index, texto ->
+                        val esActual = index == indiceActual
+                        val esPasado = index < indiceActual
+
+                        val bgColor = when {
+                            esActual -> Color(0xFFE53935)
+                            esPasado -> Color(0xFF3A3A3A)
+                            else -> Color.Transparent
+                        }
+                        val textColor = when {
+                            esActual -> Color.White
+                            esPasado -> Color.Gray
+                            else -> Color.LightGray
+                        }
+                        val modifierBox = Modifier
+                            .background(bgColor, RoundedCornerShape(20.dp))
+                            .then(
+                                if (!esActual && !esPasado) Modifier.border(1.dp, Color.Gray, RoundedCornerShape(20.dp))
+                                else Modifier
+                            )
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+
+                        Box(modifier = modifierBox) {
+                            Text(
+                                text = texto,
+                                color = textColor,
+                                fontSize = 13.sp,
+                                fontWeight = if (esActual) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
                     }
-                )
+                }
             }
 
-            // Línea conectora entre pasos
-            if (index < PASOS_ESTADO.size - 1) {
-                Spacer(
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // BOTONES INFERIORES
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = onCompartir,
                     modifier = Modifier
-                        .weight(0.3f)
-                        .height(2.dp)
-                        .background(
-                            if (index < indiceActual) ColorGrisOscuro else ColorGrisClaro
-                        )
-                )
+                        .weight(1f)
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A3A3A)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Share,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Compartir",
+                        color = Color.White,
+                        fontSize = 14.sp
+                    )
+                }
+
+                Button(
+                    onClick = onSeguirAlerta,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Notifications,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Seguir alerta",
+                        color = Color.White,
+                        fontSize = 14.sp
+                    )
+                }
             }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Ubicación GPS
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun UbicacionSection(latitud: Double, longitud: Double) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            text = "Ubicación GPS",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            CoordenadaCard(
-                etiqueta = "Latitud",
-                valor = "%.6f".format(latitud),
-                modifier = Modifier.weight(1f)
-            )
-            CoordenadaCard(
-                etiqueta = "Longitud",
-                valor = "%.6f".format(longitud),
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun CoordenadaCard(
-    etiqueta: String,
-    valor: String,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .background(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(10.dp)
-            )
-            .padding(10.dp)
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = etiqueta,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = valor,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Botones de acción
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun AccionesSection(
-    tipo: String,
-    onCompartir: () -> Unit,
-    onSeguirAlerta: () -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(
-            onClick = onCompartir,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Share,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Compartir",
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
-
-        OutlinedButton(
-            onClick = onSeguirAlerta,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Filled.NotificationsActive,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Seguir alerta",
-                style = MaterialTheme.typography.labelLarge
-            )
         }
     }
 }
