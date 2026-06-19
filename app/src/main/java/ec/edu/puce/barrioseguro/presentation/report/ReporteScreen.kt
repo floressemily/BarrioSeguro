@@ -68,8 +68,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
-import ec.edu.puce.barrioseguro.data.local.database.BarrioSeguroDatabase
-import ec.edu.puce.barrioseguro.data.repository.IncidenteRepositoryLocal
 import ec.edu.puce.barrioseguro.domain.model.Incidente
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModel
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModelFactory
@@ -90,13 +88,8 @@ fun ReporteScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val repository = remember {
-        IncidenteRepositoryLocal(
-            BarrioSeguroDatabase.getInstance(context).incidenteDao()
-        )
-    }
     val viewModel: IncidenteViewModel = viewModel(
-        factory = IncidenteViewModelFactory(repository)
+        factory = IncidenteViewModelFactory()
     )
 
     // ── Estado del formulario ────────────────────────────────────────────────

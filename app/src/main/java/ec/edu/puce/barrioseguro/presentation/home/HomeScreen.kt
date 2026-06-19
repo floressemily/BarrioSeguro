@@ -52,8 +52,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import ec.edu.puce.barrioseguro.data.local.database.BarrioSeguroDatabase
-import ec.edu.puce.barrioseguro.data.repository.IncidenteRepositoryLocal
+import android.content.Context
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.viewinterop.AndroidView
+import org.osmdroid.config.Configuration
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
 import ec.edu.puce.barrioseguro.domain.model.Incidente
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModel
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModelFactory
@@ -69,12 +74,8 @@ fun HomeScreen(
     onNavigateToReporte: () -> Unit,
     onNavigateToDetalle: (Int) -> Unit
 ) {
-    val context = LocalContext.current
-    val repository = IncidenteRepositoryLocal(
-        BarrioSeguroDatabase.getInstance(context).incidenteDao()
-    )
     val viewModel: IncidenteViewModel = viewModel(
-        factory = IncidenteViewModelFactory(repository)
+        factory = IncidenteViewModelFactory()
     )
 
     val uiState by viewModel.uiState.collectAsState()
@@ -224,21 +225,13 @@ private fun HomeContent(
             .fillMaxSize()
             .padding(paddingValues)
     ) {
-        // MAPA PLACEHOLDER
-        Box(
+        // MAPA OPENSTREETMAP
+        IncidenteMapaOSM(
+            uiState = uiState,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(220.dp)
-                .background(Color(0xFFE0E0E0)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "Mapa Placeholder",
-                color = Color.Gray,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
-        }
+        )
 
         Box(modifier = Modifier.weight(1f)) {
             when (uiState) {
@@ -264,6 +257,101 @@ private fun HomeContent(
                     IncidenteList(
                         incidentes = uiState.data,
                         onNavigateToDetalle = onNavigateToDetalle
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Mapa de incidentes — OpenStreetMap (OSMDroid)
+// ---------------------------------------------------------------------------
+
+/**
+ * Muestra un MapView de OpenStreetMap (OSMDroid) real con marcadores por cada incidente cuando el estado es [Success].
+ * En [Loading] o [Error] muestra un placeholder estilizado para no romper el layout.
+ */
+@Composable
+private fun IncidenteMapaOSM(
+    uiState: IncidenteUiState<List<Incidente>>,
+    modifier: Modifier = Modifier
+) {
+    val posicionInicial = remember { GeoPoint(-0.2295, -78.5243) }
+    val context = LocalContext.current
+
+    val mapView = remember {
+        MapView(context).apply {
+            setMultiTouchControls(true)
+            zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
+            controller.setZoom(14.0)
+            controller.setCenter(posicionInicial)
+        }
+    }
+
+    DisposableEffect(mapView) {
+        onDispose {
+            mapView.onDetach()
+        }
+    }
+
+    when (uiState) {
+        is IncidenteUiState.Success -> {
+            val incidentes = uiState.data
+
+            LaunchedEffect(incidentes) {
+                Configuration.getInstance().load(
+                    context,
+                    context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE)
+                )
+                Configuration.getInstance().userAgentValue = context.packageName
+
+                if (incidentes.isNotEmpty()) {
+                    val primero = incidentes.first()
+                    mapView.controller.animateTo(GeoPoint(primero.latitud, primero.longitud))
+                } else {
+                    mapView.controller.animateTo(posicionInicial)
+                }
+            }
+
+            AndroidView(
+                modifier = modifier,
+                factory = { mapView },
+                update = { mv ->
+                    mv.overlays.clear()
+                    incidentes.forEach { incidente ->
+                        val marker = Marker(mv).apply {
+                            position = GeoPoint(incidente.latitud, incidente.longitud)
+                            title = incidente.tipo
+                            snippet = incidente.descripcion
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                        }
+                        mv.overlays.add(marker)
+                    }
+                    mv.invalidate()
+                }
+            )
+        }
+
+        // Placeholder estilizado para Loading y Error
+        else -> {
+            Box(
+                modifier = modifier.background(Color(0xFFCFD8DC)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Filled.Map,
+                        contentDescription = null,
+                        tint = Color(0xFF607D8B),
+                        modifier = Modifier.size(36.dp)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Cargando mapa…",
+                        color = Color(0xFF455A64),
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 14.sp
                     )
                 }
             }

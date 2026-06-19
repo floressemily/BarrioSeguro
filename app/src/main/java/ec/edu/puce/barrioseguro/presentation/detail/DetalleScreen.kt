@@ -61,8 +61,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import ec.edu.puce.barrioseguro.data.local.database.BarrioSeguroDatabase
-import ec.edu.puce.barrioseguro.data.repository.IncidenteRepositoryLocal
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.viewmodel.compose.viewModel
+import ec.edu.puce.barrioseguro.presentation.viewmodel.DetalleViewModel
+import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModelFactory
+import ec.edu.puce.barrioseseguro.presentation.common.IncidenteUiState
 import ec.edu.puce.barrioseguro.domain.model.Incidente
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
@@ -72,32 +75,14 @@ fun DetalleScreen(
     incidenteId: Int,
     onNavigateBack: () -> Unit
 ) {
-    val context = LocalContext.current
-    val repository = remember {
-        IncidenteRepositoryLocal(
-            BarrioSeguroDatabase.getInstance(context).incidenteDao()
-        )
-    }
+    val viewModel: DetalleViewModel = viewModel(
+        factory = IncidenteViewModelFactory()
+    )
 
-    var incidente by remember { mutableStateOf<Incidente?>(null) }
-    var cargando by remember { mutableStateOf(true) }
-    var errorMsg by remember { mutableStateOf<String?>(null) }
+    val uiState by viewModel.uiState.collectAsState()
 
-    // Buscar incidente por ID en Room
-    LaunchedEffect(incidenteId) {
-        cargando = true
-        try {
-            incidente = repository.obtenerIncidentePorId(incidenteId)
-            if (incidente == null) errorMsg = "Incidente #$incidenteId no encontrado."
-        } catch (e: Exception) {
-            errorMsg = "Error al cargar: ${e.message}"
-        } finally {
-            cargando = false
-        }
-    }
-
-    when {
-        cargando -> {
+    when (val state = uiState) {
+        is IncidenteUiState.Loading -> {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -108,7 +93,7 @@ fun DetalleScreen(
             }
         }
 
-        errorMsg != null -> {
+        is IncidenteUiState.Error -> {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -117,16 +102,16 @@ fun DetalleScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = errorMsg!!,
+                    text = state.message,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
         }
 
-        else -> {
+        is IncidenteUiState.Success -> {
             DetalleScaffold(
-                incidente = incidente!!,
+                incidente = state.data,
                 onNavigateBack = onNavigateBack
             )
         }
