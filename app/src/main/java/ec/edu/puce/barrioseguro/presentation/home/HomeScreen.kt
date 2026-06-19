@@ -17,6 +17,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
@@ -239,8 +245,15 @@ private fun HomeContent(
                 }
 
                 is IncidenteUiState.Success -> {
+                    var filtroTipo by rememberSaveable { mutableStateOf("Todos") }
+                    val incidentesFiltrados = remember(uiState.data, filtroTipo) {
+                        if (filtroTipo == "Todos") uiState.data
+                        else uiState.data.filter { it.tipo.equals(filtroTipo, ignoreCase = true) }
+                    }
                     IncidenteList(
-                        incidentes = uiState.data,
+                        incidentes = incidentesFiltrados,
+                        filtroTipoActual = filtroTipo,
+                        onFiltroChange = { filtroTipo = it },
                         onNavigateToDetalle = onNavigateToDetalle
                     )
                 }
@@ -367,6 +380,8 @@ private fun IncidenteMapaOSM(
 @Composable
 private fun IncidenteList(
     incidentes: List<Incidente>,
+    filtroTipoActual: String,
+    onFiltroChange: (String) -> Unit,
     onNavigateToDetalle: (Int) -> Unit
 ) {
     Column(
@@ -391,14 +406,49 @@ private fun IncidenteList(
 
             Box(
                 modifier = Modifier
-                    .background(Color(0xFFF5F5F5), RoundedCornerShape(20.dp))
+                    .background(Color(0xFF2A2A2A), RoundedCornerShape(20.dp))
+                    .border(1.dp, Color.Gray, RoundedCornerShape(20.dp))
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = "Recientes ▼",
+                    text = "${incidentes.size} Alertas",
                     fontSize = 12.sp,
-                    color = Color.DarkGray
+                    color = Color.LightGray
                 )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // FILTRO CHIPS ROW
+        val filtros = listOf("Todos", "Robo", "Actividad sospechosa", "Vandalismo", "Asunto de seguridad pública")
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(vertical = 4.dp)
+        ) {
+            filtros.forEach { filtro ->
+                val esSeleccionado = filtro == filtroTipoActual
+                val bgColor = if (esSeleccionado) Color(0xFFE53935) else Color(0xFF2A2A2A)
+                val textColor = if (esSeleccionado) Color.White else Color.Gray
+                val borderColor = if (esSeleccionado) Color.Transparent else Color.Gray
+
+                Box(
+                    modifier = Modifier
+                        .background(bgColor, RoundedCornerShape(16.dp))
+                        .border(1.dp, borderColor, RoundedCornerShape(16.dp))
+                        .clickable { onFiltroChange(filtro) }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = filtro,
+                        color = textColor,
+                        fontSize = 12.sp,
+                        fontWeight = if (esSeleccionado) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
             }
         }
 
@@ -410,7 +460,7 @@ private fun IncidenteList(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No hay alertas registradas aún.\nUsa el botón + para crear la primera.",
+                    text = "No hay alertas que coincidan con este filtro.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -482,9 +532,26 @@ private fun IncidenteCard(
         "%.4f, %.4f".format(incidente.latitud, incidente.longitud)
     }
 
+    val statusText = remember(incidente.estado) {
+        when {
+            incidente.estado.contains("revision", ignoreCase = true) || incidente.estado.contains("revisión", ignoreCase = true) -> "En revisión"
+            incidente.estado.contains("resuelto", ignoreCase = true) -> "Resuelto"
+            incidente.estado.contains("alerta", ignoreCase = true) -> "En alerta"
+            else -> "Reportado"
+        }
+    }
+    val statusColor = remember(statusText) {
+        when (statusText) {
+            "En revisión" -> Color(0xFFFFB74D)
+            "Resuelto" -> Color(0xFF81C784)
+            "En alerta" -> Color(0xFFE53935)
+            else -> Color(0xFF90A4AE)
+        }
+    }
+
     Card(
         onClick = onClick,
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF1E1E1E)
         ),
@@ -497,27 +564,58 @@ private fun IncidenteCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .background(Color(0xFFE53935), RoundedCornerShape(6.dp)),
+                    .size(50.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF2A2A2A)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Warning,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
+                if (incidente.fotoUri != null) {
+                    AsyncImage(
+                        model = incidente.fotoUri,
+                        contentDescription = "Miniatura",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Column {
-                Text(
-                    text = incidente.tipo,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = Color.White
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = incidente.tipo,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = Color.White,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    
+                    Box(
+                        modifier = Modifier
+                            .background(statusColor.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                            .border(1.dp, statusColor.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = statusText,
+                            color = statusColor,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = coordenadasBarrio,
                     fontSize = 12.sp,
@@ -525,7 +623,7 @@ private fun IncidenteCard(
                 )
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.width(8.dp))
 
             Text(
                 text = tiempoRelativo,

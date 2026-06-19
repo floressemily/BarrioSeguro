@@ -48,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -380,6 +381,23 @@ private fun ReporteForm(
     val lonValid = longitudStr.toDoubleOrNull() != null
     val formularioValido = isFormEditable && tipo.isNotBlank() && descripcion.isNotBlank() && latValid && lonValid
 
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White,
+        unfocusedTextColor = Color.White,
+        disabledTextColor = Color.Gray,
+        focusedContainerColor = Color(0xFF1E1E1E),
+        unfocusedContainerColor = Color(0xFF1E1E1E),
+        disabledContainerColor = Color(0xFF121212),
+        focusedBorderColor = Color(0xFFE53935),
+        unfocusedBorderColor = Color.Gray,
+        disabledBorderColor = Color(0xFF333333),
+        focusedLabelColor = Color(0xFFE53935),
+        unfocusedLabelColor = Color.Gray,
+        disabledLabelColor = Color.Gray,
+        focusedPlaceholderColor = Color.Gray,
+        unfocusedPlaceholderColor = Color.Gray
+    )
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -430,7 +448,8 @@ private fun ReporteForm(
                 modifier = Modifier
                     .fillMaxWidth()
                     .menuAnchor(),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                colors = textFieldColors
             )
             ExposedDropdownMenu(
                 expanded = expanded && isFormEditable,
@@ -457,7 +476,8 @@ private fun ReporteForm(
             minLines = 3,
             maxLines = 6,
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp)
+            shape = RoundedCornerShape(8.dp),
+            colors = textFieldColors
         )
 
         // ── 5. Ubicación GPS editable ──────────────────────────────────────
@@ -469,21 +489,23 @@ private fun ReporteForm(
                 value = latitudStr,
                 onValueChange = onLatitudChange,
                 enabled = isFormEditable,
-                label = { Text("Latitud") },
+                label = { Text("Latitud", color = if (latitudStr.isNotEmpty() && !latValid) Color.Red else Color.Gray) },
                 isError = latitudStr.isNotEmpty() && !latValid,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                colors = textFieldColors
             )
             OutlinedTextField(
                 value = longitudStr,
                 onValueChange = onLongitudChange,
                 enabled = isFormEditable,
-                label = { Text("Longitud") },
+                label = { Text("Longitud", color = if (longitudStr.isNotEmpty() && !lonValid) Color.Red else Color.Gray) },
                 isError = longitudStr.isNotEmpty() && !lonValid,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                colors = textFieldColors
             )
         }
 
