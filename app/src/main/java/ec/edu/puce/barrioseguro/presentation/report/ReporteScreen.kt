@@ -3,8 +3,8 @@ package ec.edu.puce.barrioseguro.presentation.report
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.location.Location
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -71,6 +71,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import ec.edu.puce.barrioseguro.domain.model.Incidente
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModel
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModelFactory
+import java.io.File
 
 val TIPOS_INCIDENTE = listOf(
     "Robo",
@@ -78,6 +79,10 @@ val TIPOS_INCIDENTE = listOf(
     "Vandalismo",
     "Asunto de seguridad pública"
 )
+
+// ---------------------------------------------------------------------------
+// Entrada pública — firma fija para el NavGraph
+// ---------------------------------------------------------------------------
 
 @Composable
 fun ReporteScreen(
@@ -93,45 +98,38 @@ fun ReporteScreen(
     // ── Estado del formulario ────────────────────────────────────────────────
     var tipo by rememberSaveable { mutableStateOf("") }
     var descripcion by rememberSaveable { mutableStateOf("") }
-    var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
-    var fotoUriString by rememberSaveable { mutableStateOf<String?>(null) }
+    var fotoUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var latitud by remember { mutableStateOf<Double?>(null) }
     var longitud by remember { mutableStateOf<Double?>(null) }
     var ubicacionError by remember { mutableStateOf<String?>(null) }
 
-    // ── Launcher de cámara ───────────────────────────────────────────────────
+    // URI temporal preparada antes de abrir la cámara, almacenada en caché privada
+    // (no ocupa memoria RAM ni requiere permisos de almacenamiento externo).
+    val fotoFileUri = remember {
+        val fotoFile = File(context.cacheDir, "foto_incidente_${System.currentTimeMillis()}.jpg")
+        FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            fotoFile
+        )
+    }
+
+    // ── Launcher de cámara con TakePicture (URI real, alta calidad) ──────────
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
-        if (success) {
-            fotoUriString = tempPhotoUri?.toString()
-        }
-    }
-
-    // Helper para abrir la cámara guardando en un archivo de caché
-    fun abrirCamara() {
-        try {
-            val photoFile = java.io.File(context.cacheDir, "foto_reporte_${System.currentTimeMillis()}.jpg")
-            val uri = FileProvider.getUriForFile(
-                context,
-                "ec.edu.puce.barrioseguro.fileprovider",
-                photoFile
-            )
-            tempPhotoUri = uri
-            cameraLauncher.launch(uri)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        // success == true significa que el usuario tomó la foto y se guardó en fotoFileUri.
+        if (success) fotoUri = fotoFileUri
     }
 
     // ── Launcher de permiso de cámara ────────────────────────────────────────
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) abrirCamara()
+        if (granted) cameraLauncher.launch(fotoFileUri)
     }
 
-    // ── Launcher de permiso de ubicación ────────────────────────────────────
+    // ── Cliente de ubicación ─────────────────────────────────────────────────
     val fusedLocationClient = remember {
         LocationServices.getFusedLocationProviderClient(context)
     }
@@ -188,7 +186,7 @@ fun ReporteScreen(
     ReporteScaffold(
         tipo = tipo,
         descripcion = descripcion,
-        fotoUriString = fotoUriString,
+        fotoUri = fotoUri,
         latitud = latitud,
         longitud = longitud,
         ubicacionError = ubicacionError,
@@ -198,7 +196,7 @@ fun ReporteScreen(
             val cameraGranted = ContextCompat.checkSelfPermission(
                 context, Manifest.permission.CAMERA
             ) == PackageManager.PERMISSION_GRANTED
-            if (cameraGranted) abrirCamara()
+            if (cameraGranted) cameraLauncher.launch(fotoFileUri)
             else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         },
         onEnviarClick = {
@@ -208,7 +206,7 @@ fun ReporteScreen(
                 descripcion = descripcion,
                 latitud = latitud ?: 0.0,
                 longitud = longitud ?: 0.0,
-                fotoUri = fotoUriString,
+                fotoUri = fotoUri?.toString(), // URI real persistida como String
                 timestamp = System.currentTimeMillis(),
                 estado = "activo"
             )
@@ -221,12 +219,16 @@ fun ReporteScreen(
     )
 }
 
+// ---------------------------------------------------------------------------
+// Scaffold principal
+// ---------------------------------------------------------------------------
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReporteScaffold(
     tipo: String,
     descripcion: String,
-    fotoUriString: String?,
+    fotoUri: Uri?,
     latitud: Double?,
     longitud: Double?,
     ubicacionError: String?,
@@ -296,7 +298,7 @@ private fun ReporteScaffold(
             modifier = Modifier.padding(paddingValues),
             tipo = tipo,
             descripcion = descripcion,
-            fotoUriString = fotoUriString,
+            fotoUri = fotoUri,
             latitud = latitud,
             longitud = longitud,
             ubicacionError = ubicacionError,
@@ -308,13 +310,17 @@ private fun ReporteScaffold(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Formulario principal
+// ---------------------------------------------------------------------------
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReporteForm(
     modifier: Modifier = Modifier,
     tipo: String,
     descripcion: String,
-    fotoUriString: String?,
+    fotoUri: Uri?,
     latitud: Double?,
     longitud: Double?,
     ubicacionError: String?,
@@ -334,7 +340,7 @@ private fun ReporteForm(
     ) {
         // ── 1. Área de foto ──────────────────────────────────────────────────
         FotoSection(
-            fotoUriString = fotoUriString,
+            fotoUri = fotoUri,
             onTomarFotoClick = onTomarFotoClick
         )
 
@@ -415,9 +421,13 @@ private fun ReporteForm(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Sección de foto — usa Coil AsyncImage para cargar la URI sin bloquear el hilo
+// ---------------------------------------------------------------------------
+
 @Composable
 private fun FotoSection(
-    fotoUriString: String?,
+    fotoUri: Uri?,
     onTomarFotoClick: () -> Unit
 ) {
     Box(
@@ -429,9 +439,11 @@ private fun FotoSection(
             .clickable { onTomarFotoClick() },
         contentAlignment = Alignment.Center
     ) {
-        if (fotoUriString != null) {
+        if (fotoUri != null) {
+            // Coil carga la imagen de forma asíncrona, comprimida y cacheada en disco —
+            // no se carga el Bitmap completo en RAM.
             AsyncImage(
-                model = fotoUriString,
+                model = fotoUri,
                 contentDescription = "Foto del incidente",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -457,6 +469,10 @@ private fun FotoSection(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Sección de ubicación GPS
+// ---------------------------------------------------------------------------
+
 @Composable
 private fun UbicacionSection(
     latitud: Double?,
@@ -478,7 +494,8 @@ private fun UbicacionSection(
             modifier = Modifier.size(20.dp)
         )
         val textoUbicacion = when {
-            latitud != null && longitud != null -> "Quito, Ecuador"
+            latitud != null && longitud != null ->
+                "%.5f, %.5f".format(latitud, longitud)
             ubicacionError != null -> ubicacionError
             else -> "Obteniendo ubicación..."
         }

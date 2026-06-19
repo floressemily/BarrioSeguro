@@ -39,10 +39,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -51,18 +54,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import android.content.Context
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.viewinterop.AndroidView
-import org.osmdroid.config.Configuration
+import androidx.lifecycle.viewmodel.compose.viewModel
+import ec.edu.puce.barrioseguro.domain.model.Incidente
+import ec.edu.puce.barrioseguro.presentation.common.IncidenteUiState
+import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModel
+import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModelFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
-import ec.edu.puce.barrioseguro.domain.model.Incidente
-import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModel
-import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModelFactory
-import ec.edu.puce.barrioseseguro.presentation.common.IncidenteUiState
 import java.util.concurrent.TimeUnit
 
 // ---------------------------------------------------------------------------
@@ -72,53 +72,26 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun HomeScreen(
     onNavigateToReporte: () -> Unit,
-    onNavigateToDetalle: (Int) -> Unit
+    onNavigateToDetalle: (Int) -> Unit,
+    onNavigateToMap: () -> Unit,
+    onNavigateToProfile: () -> Unit
 ) {
     val viewModel: IncidenteViewModel = viewModel(
         factory = IncidenteViewModelFactory()
     )
-
     val uiState by viewModel.uiState.collectAsState()
 
+    // Iniciar la colección del Flow de Room una sola vez.
     LaunchedEffect(Unit) {
         viewModel.cargarIncidentes()
-    }
-
-    // DATOS DE PRUEBA condicionados
-    LaunchedEffect(uiState) {
-        if (uiState is IncidenteUiState.Success) {
-            val list = (uiState as IncidenteUiState.Success<List<Incidente>>).data
-            if (list.isEmpty()) {
-                val incidentePrueba1 = Incidente(
-                    id = 0,
-                    tipo = "Robo",
-                    descripcion = "Robo de celular en la esquina del parque",
-                    latitud = -0.2295,
-                    longitud = -78.5243,
-                    fotoUri = null,
-                    timestamp = System.currentTimeMillis() - 600000,
-                    estado = "activo"
-                )
-                val incidentePrueba2 = Incidente(
-                    id = 0,
-                    tipo = "Actividad sospechosa",
-                    descripcion = "Persona merodeando el edificio hace 30 minutos",
-                    latitud = -0.2301,
-                    longitud = -78.5251,
-                    fotoUri = null,
-                    timestamp = System.currentTimeMillis() - 1800000,
-                    estado = "en revision"
-                )
-                viewModel.guardarIncidente(incidentePrueba1)
-                viewModel.guardarIncidente(incidentePrueba2)
-            }
-        }
     }
 
     HomeScaffold(
         uiState = uiState,
         onNavigateToReporte = onNavigateToReporte,
-        onNavigateToDetalle = onNavigateToDetalle
+        onNavigateToDetalle = onNavigateToDetalle,
+        onNavigateToMap = onNavigateToMap,
+        onNavigateToProfile = onNavigateToProfile
     )
 }
 
@@ -131,12 +104,19 @@ fun HomeScreen(
 private fun HomeScaffold(
     uiState: IncidenteUiState<List<Incidente>>,
     onNavigateToReporte: () -> Unit,
-    onNavigateToDetalle: (Int) -> Unit
+    onNavigateToDetalle: (Int) -> Unit,
+    onNavigateToMap: () -> Unit,
+    onNavigateToProfile: () -> Unit
 ) {
     Scaffold(
         topBar = { HomeTopBar() },
         floatingActionButton = { HomeFab(onClick = onNavigateToReporte) },
-        bottomBar = { HomeBottomBar() },
+        bottomBar = {
+            HomeBottomBar(
+                onNavigateToMap = onNavigateToMap,
+                onNavigateToProfile = onNavigateToProfile
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         HomeContent(
@@ -187,7 +167,10 @@ private fun HomeFab(onClick: () -> Unit) {
 }
 
 @Composable
-private fun HomeBottomBar() {
+private fun HomeBottomBar(
+    onNavigateToMap: () -> Unit,
+    onNavigateToProfile: () -> Unit
+) {
     NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
         NavigationBarItem(
             selected = true,
@@ -197,13 +180,13 @@ private fun HomeBottomBar() {
         )
         NavigationBarItem(
             selected = false,
-            onClick = { },
+            onClick = onNavigateToMap,
             icon = { Icon(Icons.Filled.Map, contentDescription = "Mapa") },
             label = { Text("Mapa") }
         )
         NavigationBarItem(
             selected = false,
-            onClick = { },
+            onClick = onNavigateToProfile,
             icon = { Icon(Icons.Filled.Person, contentDescription = "Perfil") },
             label = { Text("Perfil") }
         )
@@ -266,12 +249,10 @@ private fun HomeContent(
 
 // ---------------------------------------------------------------------------
 // Mapa de incidentes — OpenStreetMap (OSMDroid)
+// Regla: Configuration.getInstance().load() se ejecuta en BarrioSeguroApplication,
+//        no aquí. Este composable solo crea y gestiona el ciclo de vida del MapView.
 // ---------------------------------------------------------------------------
 
-/**
- * Muestra un MapView de OpenStreetMap (OSMDroid) real con marcadores por cada incidente cuando el estado es [Success].
- * En [Loading] o [Error] muestra un placeholder estilizado para no romper el layout.
- */
 @Composable
 private fun IncidenteMapaOSM(
     uiState: IncidenteUiState<List<Incidente>>,
@@ -280,18 +261,16 @@ private fun IncidenteMapaOSM(
     val posicionInicial = remember { GeoPoint(-0.2295, -78.5243) }
     val context = LocalContext.current
 
-    val mapView = remember {
-        MapView(context).apply {
-            setMultiTouchControls(true)
-            zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
-            controller.setZoom(14.0)
-            controller.setCenter(posicionInicial)
-        }
-    }
+    // mapView se crea solo cuando el estado es Success para evitar instanciar
+    // el MapView antes de tener datos y desperdiciar recursos.
+    var mapViewRef by remember { mutableStateOf<MapView?>(null) }
 
-    DisposableEffect(mapView) {
+    // Gestión del ciclo de vida: pausar y desconectar cuando el composable se destruye.
+    DisposableEffect(Unit) {
         onDispose {
-            mapView.onDetach()
+            mapViewRef?.onPause()
+            mapViewRef?.onDetach()
+            mapViewRef = null
         }
     }
 
@@ -299,25 +278,28 @@ private fun IncidenteMapaOSM(
         is IncidenteUiState.Success -> {
             val incidentes = uiState.data
 
-            LaunchedEffect(incidentes) {
-                Configuration.getInstance().load(
-                    context,
-                    context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE)
-                )
-                Configuration.getInstance().userAgentValue = context.packageName
-
-                if (incidentes.isNotEmpty()) {
-                    val primero = incidentes.first()
-                    mapView.controller.animateTo(GeoPoint(primero.latitud, primero.longitud))
-                } else {
-                    mapView.controller.animateTo(posicionInicial)
-                }
-            }
-
             AndroidView(
                 modifier = modifier,
-                factory = { mapView },
+                factory = { ctx ->
+                    // La configuración de OSMDroid YA fue hecha en Application.
+                    // Aquí solo creamos la vista de forma segura.
+                    MapView(ctx).apply {
+                        setMultiTouchControls(true)
+                        zoomController.setVisibility(
+                            org.osmdroid.views.CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT
+                        )
+                        controller.setZoom(14.0)
+                        controller.setCenter(
+                            if (incidentes.isNotEmpty())
+                                GeoPoint(incidentes.first().latitud, incidentes.first().longitud)
+                            else
+                                posicionInicial
+                        )
+                        onResume()
+                    }.also { mapViewRef = it }
+                },
                 update = { mv ->
+                    // update solo gestiona overlays — nunca re-inicializa configuración.
                     mv.overlays.clear()
                     incidentes.forEach { incidente ->
                         val marker = Marker(mv).apply {
@@ -409,9 +391,11 @@ private fun IncidenteList(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No hay alertas registradas aún.",
+                    text = "No hay alertas registradas aún.\nUsa el botón + para crear la primera.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 24.dp)
                 )
             }
         } else {
@@ -425,7 +409,7 @@ private fun IncidenteList(
                         onClick = { onNavigateToDetalle(incidente.id) }
                     )
                 }
-                
+
                 if (incidentes.size > 3) {
                     item {
                         Text(

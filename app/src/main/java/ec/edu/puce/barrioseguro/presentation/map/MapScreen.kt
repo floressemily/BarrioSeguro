@@ -1,6 +1,5 @@
 package ec.edu.puce.barrioseguro.presentation.map
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,16 +35,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ec.edu.puce.barrioseguro.domain.model.Incidente
 import ec.edu.puce.barrioseguro.presentation.common.IncidenteUiState
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModel
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModelFactory
-import org.osmdroid.config.Configuration
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
@@ -60,9 +61,6 @@ fun MapScreen(
     )
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(Unit) {
-        viewModel.cargarIncidentes()
-    }
 
     MapScaffold(
         uiState = uiState,
@@ -140,14 +138,25 @@ private fun IncidenteMapaCompletoOSM(
 ) {
     val posicionInicial = remember { GeoPoint(-0.2295, -78.5243) }
     val context = LocalContext.current
-    var mapInitialized by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
 
-    DisposableEffect(mapViewRef) {
-        val mapView = mapViewRef
+    // Sincronizar onResume/onPause del MapView con el ciclo de vida de la pantalla.
+    // Esto previene fugas de recursos y cierres inesperados al navegar entre pestañas.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> mapViewRef?.onResume()
+                Lifecycle.Event.ON_PAUSE  -> mapViewRef?.onPause()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
-            mapView?.onPause()
-            mapView?.onDetach()
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            mapViewRef?.onPause()
+            mapViewRef?.onDetach()
+            mapViewRef = null
         }
     }
 
@@ -158,32 +167,24 @@ private fun IncidenteMapaCompletoOSM(
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
-                    // Inicializar OSMDroid ANTES de crear MapView
-                    Configuration.getInstance().load(
-                        ctx,
-                        ctx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE)
-                    )
-                    Configuration.getInstance().userAgentValue = ctx.packageName
-
+                    // OSMDroid YA fue inicializado en BarrioSeguroApplication.
+                    // Aquí solo instanciamos y configuramos la vista.
                     MapView(ctx).apply {
                         setMultiTouchControls(true)
-                        zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
+                        zoomController.setVisibility(
+                            org.osmdroid.views.CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT
+                        )
                         controller.setZoom(14.0)
-                        controller.setCenter(posicionInicial)
-                        onResume()
+                        controller.setCenter(
+                            if (incidentes.isNotEmpty())
+                                GeoPoint(incidentes.first().latitud, incidentes.first().longitud)
+                            else
+                                posicionInicial
+                        )
                     }.also { mapViewRef = it }
                 },
                 update = { mv ->
-                    if (!mapInitialized && incidentes.isNotEmpty()) {
-                        val primero = incidentes.first()
-                        mv.controller.setZoom(14.0)
-                        mv.controller.animateTo(GeoPoint(primero.latitud, primero.longitud))
-                        mapInitialized = true
-                    } else if (!mapInitialized) {
-                        mv.controller.setZoom(14.0)
-                        mv.controller.animateTo(posicionInicial)
-                    }
-
+                    // update solo maneja overlays/marcadores — nunca toca la configuración.
                     mv.overlays.clear()
                     incidentes.forEach { incidente ->
                         val marker = Marker(mv).apply {
@@ -200,7 +201,9 @@ private fun IncidenteMapaCompletoOSM(
         }
         else -> {
             Box(
-                modifier = Modifier.fillMaxSize().background(Color(0xFFCFD8DC)),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFFCFD8DC)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
