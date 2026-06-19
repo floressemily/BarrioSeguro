@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ec.edu.puce.barrioseguro.domain.model.Incidente
 import ec.edu.puce.barrioseguro.domain.repository.IncidenteRepository
-import ec.edu.puce.barrioseseguro.presentation.common.IncidenteUiState
+import ec.edu.puce.barrioseguro.presentation.common.IncidenteUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

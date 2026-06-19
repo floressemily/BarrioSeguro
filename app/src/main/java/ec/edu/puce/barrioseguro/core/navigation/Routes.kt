@@ -13,3 +13,9 @@ data class DetalleRoute(
     val incidenteId: Int
 )
 
+@Serializable
+object MapRoute
+
+@Serializable
+object ProfileRoute
+

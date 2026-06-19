@@ -3,11 +3,10 @@ package ec.edu.puce.barrioseguro.presentation.report
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
+import android.net.Uri
 import android.location.Location
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,14 +56,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -79,13 +79,11 @@ val TIPOS_INCIDENTE = listOf(
     "Asunto de seguridad pública"
 )
 
-// ---------------------------------------------------------------------------
-// Entrada pública — firma fija para el NavGraph
-// ---------------------------------------------------------------------------
-
 @Composable
 fun ReporteScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToMap: () -> Unit,
+    onNavigateToProfile: () -> Unit
 ) {
     val context = LocalContext.current
     val viewModel: IncidenteViewModel = viewModel(
@@ -95,23 +93,42 @@ fun ReporteScreen(
     // ── Estado del formulario ────────────────────────────────────────────────
     var tipo by rememberSaveable { mutableStateOf("") }
     var descripcion by rememberSaveable { mutableStateOf("") }
-    var fotoBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var fotoUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var latitud by remember { mutableStateOf<Double?>(null) }
     var longitud by remember { mutableStateOf<Double?>(null) }
     var ubicacionError by remember { mutableStateOf<String?>(null) }
 
     // ── Launcher de cámara ───────────────────────────────────────────────────
     val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bitmap ->
-        fotoBitmap = bitmap
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            fotoUriString = tempPhotoUri?.toString()
+        }
+    }
+
+    // Helper para abrir la cámara guardando en un archivo de caché
+    fun abrirCamara() {
+        try {
+            val photoFile = java.io.File(context.cacheDir, "foto_reporte_${System.currentTimeMillis()}.jpg")
+            val uri = FileProvider.getUriForFile(
+                context,
+                "ec.edu.puce.barrioseguro.fileprovider",
+                photoFile
+            )
+            tempPhotoUri = uri
+            cameraLauncher.launch(uri)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     // ── Launcher de permiso de cámara ────────────────────────────────────────
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) cameraLauncher.launch(null)
+        if (granted) abrirCamara()
     }
 
     // ── Launcher de permiso de ubicación ────────────────────────────────────
@@ -171,7 +188,7 @@ fun ReporteScreen(
     ReporteScaffold(
         tipo = tipo,
         descripcion = descripcion,
-        fotoBitmap = fotoBitmap,
+        fotoUriString = fotoUriString,
         latitud = latitud,
         longitud = longitud,
         ubicacionError = ubicacionError,
@@ -181,7 +198,7 @@ fun ReporteScreen(
             val cameraGranted = ContextCompat.checkSelfPermission(
                 context, Manifest.permission.CAMERA
             ) == PackageManager.PERMISSION_GRANTED
-            if (cameraGranted) cameraLauncher.launch(null)
+            if (cameraGranted) abrirCamara()
             else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         },
         onEnviarClick = {
@@ -191,27 +208,25 @@ fun ReporteScreen(
                 descripcion = descripcion,
                 latitud = latitud ?: 0.0,
                 longitud = longitud ?: 0.0,
-                fotoUri = null,
+                fotoUri = fotoUriString,
                 timestamp = System.currentTimeMillis(),
                 estado = "activo"
             )
             viewModel.guardarIncidente(incidente)
             onNavigateBack()
         },
-        onNavigateBack = onNavigateBack
+        onNavigateBack = onNavigateBack,
+        onNavigateToMap = onNavigateToMap,
+        onNavigateToProfile = onNavigateToProfile
     )
 }
-
-// ---------------------------------------------------------------------------
-// Scaffold principal
-// ---------------------------------------------------------------------------
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReporteScaffold(
     tipo: String,
     descripcion: String,
-    fotoBitmap: Bitmap?,
+    fotoUriString: String?,
     latitud: Double?,
     longitud: Double?,
     ubicacionError: String?,
@@ -219,7 +234,9 @@ private fun ReporteScaffold(
     onDescripcionChange: (String) -> Unit,
     onTomarFotoClick: () -> Unit,
     onEnviarClick: () -> Unit,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToMap: () -> Unit,
+    onNavigateToProfile: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -261,13 +278,13 @@ private fun ReporteScaffold(
                 )
                 NavigationBarItem(
                     selected = false,
-                    onClick = { },
+                    onClick = onNavigateToMap,
                     icon = { Icon(Icons.Filled.Map, contentDescription = "Mapa") },
                     label = { Text("Mapa") }
                 )
                 NavigationBarItem(
                     selected = false,
-                    onClick = { },
+                    onClick = onNavigateToProfile,
                     icon = { Icon(Icons.Filled.Person, contentDescription = "Perfil") },
                     label = { Text("Perfil") }
                 )
@@ -279,7 +296,7 @@ private fun ReporteScaffold(
             modifier = Modifier.padding(paddingValues),
             tipo = tipo,
             descripcion = descripcion,
-            fotoBitmap = fotoBitmap,
+            fotoUriString = fotoUriString,
             latitud = latitud,
             longitud = longitud,
             ubicacionError = ubicacionError,
@@ -291,17 +308,13 @@ private fun ReporteScaffold(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Formulario principal
-// ---------------------------------------------------------------------------
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReporteForm(
     modifier: Modifier = Modifier,
     tipo: String,
     descripcion: String,
-    fotoBitmap: Bitmap?,
+    fotoUriString: String?,
     latitud: Double?,
     longitud: Double?,
     ubicacionError: String?,
@@ -321,7 +334,7 @@ private fun ReporteForm(
     ) {
         // ── 1. Área de foto ──────────────────────────────────────────────────
         FotoSection(
-            fotoBitmap = fotoBitmap,
+            fotoUriString = fotoUriString,
             onTomarFotoClick = onTomarFotoClick
         )
 
@@ -402,13 +415,9 @@ private fun ReporteForm(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Sección de foto
-// ---------------------------------------------------------------------------
-
 @Composable
 private fun FotoSection(
-    fotoBitmap: Bitmap?,
+    fotoUriString: String?,
     onTomarFotoClick: () -> Unit
 ) {
     Box(
@@ -420,9 +429,9 @@ private fun FotoSection(
             .clickable { onTomarFotoClick() },
         contentAlignment = Alignment.Center
     ) {
-        if (fotoBitmap != null) {
-            Image(
-                bitmap = fotoBitmap.asImageBitmap(),
+        if (fotoUriString != null) {
+            AsyncImage(
+                model = fotoUriString,
                 contentDescription = "Foto del incidente",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -447,10 +456,6 @@ private fun FotoSection(
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Sección de ubicación GPS
-// ---------------------------------------------------------------------------
 
 @Composable
 private fun UbicacionSection(

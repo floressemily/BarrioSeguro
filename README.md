@@ -1,4 +1,4 @@
-# BarrioSeguro
+git add .# BarrioSeguro
 
 Aplicación móvil nativa Android desarrollada en Kotlin para seguridad y conectividad comunitaria.
 

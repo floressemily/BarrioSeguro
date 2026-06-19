@@ -43,6 +43,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -62,7 +64,7 @@ import org.osmdroid.views.overlay.Marker
 import ec.edu.puce.barrioseguro.domain.model.Incidente
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModel
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModelFactory
-import ec.edu.puce.barrioseseguro.presentation.common.IncidenteUiState
+import ec.edu.puce.barrioseguro.presentation.common.IncidenteUiState
 import java.util.concurrent.TimeUnit
 
 // ---------------------------------------------------------------------------
@@ -72,7 +74,9 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun HomeScreen(
     onNavigateToReporte: () -> Unit,
-    onNavigateToDetalle: (Int) -> Unit
+    onNavigateToDetalle: (Int) -> Unit,
+    onNavigateToMap: () -> Unit,
+    onNavigateToProfile: () -> Unit
 ) {
     val viewModel: IncidenteViewModel = viewModel(
         factory = IncidenteViewModelFactory()
@@ -118,7 +122,9 @@ fun HomeScreen(
     HomeScaffold(
         uiState = uiState,
         onNavigateToReporte = onNavigateToReporte,
-        onNavigateToDetalle = onNavigateToDetalle
+        onNavigateToDetalle = onNavigateToDetalle,
+        onNavigateToMap = onNavigateToMap,
+        onNavigateToProfile = onNavigateToProfile
     )
 }
 
@@ -131,12 +137,19 @@ fun HomeScreen(
 private fun HomeScaffold(
     uiState: IncidenteUiState<List<Incidente>>,
     onNavigateToReporte: () -> Unit,
-    onNavigateToDetalle: (Int) -> Unit
+    onNavigateToDetalle: (Int) -> Unit,
+    onNavigateToMap: () -> Unit,
+    onNavigateToProfile: () -> Unit
 ) {
     Scaffold(
         topBar = { HomeTopBar() },
         floatingActionButton = { HomeFab(onClick = onNavigateToReporte) },
-        bottomBar = { HomeBottomBar() },
+        bottomBar = {
+            HomeBottomBar(
+                onNavigateToMap = onNavigateToMap,
+                onNavigateToProfile = onNavigateToProfile
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         HomeContent(
@@ -187,7 +200,10 @@ private fun HomeFab(onClick: () -> Unit) {
 }
 
 @Composable
-private fun HomeBottomBar() {
+private fun HomeBottomBar(
+    onNavigateToMap: () -> Unit,
+    onNavigateToProfile: () -> Unit
+) {
     NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
         NavigationBarItem(
             selected = true,
@@ -197,13 +213,13 @@ private fun HomeBottomBar() {
         )
         NavigationBarItem(
             selected = false,
-            onClick = { },
+            onClick = onNavigateToMap,
             icon = { Icon(Icons.Filled.Map, contentDescription = "Mapa") },
             label = { Text("Mapa") }
         )
         NavigationBarItem(
             selected = false,
-            onClick = { },
+            onClick = onNavigateToProfile,
             icon = { Icon(Icons.Filled.Person, contentDescription = "Perfil") },
             label = { Text("Perfil") }
         )
@@ -279,19 +295,16 @@ private fun IncidenteMapaOSM(
 ) {
     val posicionInicial = remember { GeoPoint(-0.2295, -78.5243) }
     val context = LocalContext.current
+    var mapInitialized by remember { mutableStateOf(false) }
 
-    val mapView = remember {
-        MapView(context).apply {
-            setMultiTouchControls(true)
-            zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
-            controller.setZoom(14.0)
-            controller.setCenter(posicionInicial)
-        }
-    }
+    // Guardar referencia al MapView de forma local para llamarle onDetach al destruirse
+    var mapViewRef by remember { mutableStateOf<MapView?>(null) }
 
-    DisposableEffect(mapView) {
+    DisposableEffect(mapViewRef) {
+        val mapView = mapViewRef
         onDispose {
-            mapView.onDetach()
+            mapView?.onPause()
+            mapView?.onDetach()
         }
     }
 
@@ -299,25 +312,36 @@ private fun IncidenteMapaOSM(
         is IncidenteUiState.Success -> {
             val incidentes = uiState.data
 
-            LaunchedEffect(incidentes) {
-                Configuration.getInstance().load(
-                    context,
-                    context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE)
-                )
-                Configuration.getInstance().userAgentValue = context.packageName
-
-                if (incidentes.isNotEmpty()) {
-                    val primero = incidentes.first()
-                    mapView.controller.animateTo(GeoPoint(primero.latitud, primero.longitud))
-                } else {
-                    mapView.controller.animateTo(posicionInicial)
-                }
-            }
-
             AndroidView(
                 modifier = modifier,
-                factory = { mapView },
+                factory = { ctx ->
+                    // Inicializar OSMDroid ANTES de crear MapView
+                    Configuration.getInstance().load(
+                        ctx,
+                        ctx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE)
+                    )
+                    Configuration.getInstance().userAgentValue = ctx.packageName
+
+                    MapView(ctx).apply {
+                        setMultiTouchControls(true)
+                        zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
+                        controller.setZoom(14.0)
+                        controller.setCenter(posicionInicial)
+                        onResume()
+                    }.also { mapViewRef = it }
+                },
                 update = { mv ->
+                    // Centrar solo una vez al cargar datos
+                    if (!mapInitialized && incidentes.isNotEmpty()) {
+                        val primero = incidentes.first()
+                        mv.controller.setZoom(14.0)
+                        mv.controller.animateTo(GeoPoint(primero.latitud, primero.longitud))
+                        mapInitialized = true
+                    } else if (!mapInitialized) {
+                        mv.controller.setZoom(14.0)
+                        mv.controller.animateTo(posicionInicial)
+                    }
+
                     mv.overlays.clear()
                     incidentes.forEach { incidente ->
                         val marker = Marker(mv).apply {
