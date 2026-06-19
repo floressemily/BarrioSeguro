@@ -44,4 +44,19 @@ class DetalleViewModel(
             }
         }
     }
+
+    fun actualizarEstado(nuevoEstado: String) {
+        val estadoActual = _uiState.value
+        if (estadoActual is IncidenteUiState.Success) {
+            val incidenteActualizado = estadoActual.data.copy(estado = nuevoEstado)
+            viewModelScope.launch {
+                try {
+                    repository.guardarIncidente(incidenteActualizado)
+                    _uiState.value = IncidenteUiState.Success(incidenteActualizado)
+                } catch (e: Exception) {
+                    // Manejar error
+                }
+            }
+        }
+    }
 }

@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -54,7 +55,8 @@ import org.osmdroid.views.overlay.Marker
 @Composable
 fun MapScreen(
     onNavigateToHome: () -> Unit,
-    onNavigateToProfile: () -> Unit
+    onNavigateToProfile: () -> Unit,
+    onNavigateToDetalle: (Int) -> Unit
 ) {
     val viewModel: IncidenteViewModel = viewModel(
         factory = IncidenteViewModelFactory()
@@ -65,7 +67,8 @@ fun MapScreen(
     MapScaffold(
         uiState = uiState,
         onNavigateToHome = onNavigateToHome,
-        onNavigateToProfile = onNavigateToProfile
+        onNavigateToProfile = onNavigateToProfile,
+        onNavigateToDetalle = onNavigateToDetalle
     )
 }
 
@@ -74,7 +77,8 @@ fun MapScreen(
 private fun MapScaffold(
     uiState: IncidenteUiState<List<Incidente>>,
     onNavigateToHome: () -> Unit,
-    onNavigateToProfile: () -> Unit
+    onNavigateToProfile: () -> Unit,
+    onNavigateToDetalle: (Int) -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -127,19 +131,24 @@ private fun MapScaffold(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            IncidenteMapaCompletoOSM(uiState = uiState)
+            IncidenteMapaCompletoOSM(
+                uiState = uiState,
+                onNavigateToDetalle = onNavigateToDetalle
+            )
         }
     }
 }
 
 @Composable
 private fun IncidenteMapaCompletoOSM(
-    uiState: IncidenteUiState<List<Incidente>>
+    uiState: IncidenteUiState<List<Incidente>>,
+    onNavigateToDetalle: (Int) -> Unit
 ) {
     val posicionInicial = remember { GeoPoint(-0.2295, -78.5243) }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+    var mapInitialized by rememberSaveable { mutableStateOf(false) }
 
     // Sincronizar onResume/onPause del MapView con el ciclo de vida de la pantalla.
     // Esto previene fugas de recursos y cierres inesperados al navegar entre pestañas.
@@ -184,7 +193,13 @@ private fun IncidenteMapaCompletoOSM(
                     }.also { mapViewRef = it }
                 },
                 update = { mv ->
-                    // update solo maneja overlays/marcadores — nunca toca la configuración.
+                    // Centrar cámara en los incidentes cuando se carguen
+                    if (!mapInitialized && incidentes.isNotEmpty()) {
+                        val primero = incidentes.first()
+                        mv.controller.animateTo(GeoPoint(primero.latitud, primero.longitud))
+                        mapInitialized = true
+                    }
+
                     mv.overlays.clear()
                     incidentes.forEach { incidente ->
                         val marker = Marker(mv).apply {
@@ -192,6 +207,15 @@ private fun IncidenteMapaCompletoOSM(
                             title = incidente.tipo
                             snippet = incidente.descripcion
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                            setOnMarkerClickListener { m, _ ->
+                                if (m.isInfoWindowOpen) {
+                                    onNavigateToDetalle(incidente.id)
+                                } else {
+                                    m.showInfoWindow()
+                                    mv.controller.animateTo(m.position)
+                                }
+                                true
+                            }
                         }
                         mv.overlays.add(marker)
                     }

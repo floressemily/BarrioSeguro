@@ -46,6 +46,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -211,6 +212,7 @@ private fun HomeContent(
         // MAPA OPENSTREETMAP
         IncidenteMapaOSM(
             uiState = uiState,
+            onNavigateToDetalle = onNavigateToDetalle,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(220.dp)
@@ -256,10 +258,12 @@ private fun HomeContent(
 @Composable
 private fun IncidenteMapaOSM(
     uiState: IncidenteUiState<List<Incidente>>,
+    onNavigateToDetalle: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val posicionInicial = remember { GeoPoint(-0.2295, -78.5243) }
     val context = LocalContext.current
+    var mapInitialized by rememberSaveable { mutableStateOf(false) }
 
     // mapView se crea solo cuando el estado es Success para evitar instanciar
     // el MapView antes de tener datos y desperdiciar recursos.
@@ -299,7 +303,13 @@ private fun IncidenteMapaOSM(
                     }.also { mapViewRef = it }
                 },
                 update = { mv ->
-                    // update solo gestiona overlays — nunca re-inicializa configuración.
+                    // Centrar cámara en los incidentes cuando se carguen
+                    if (!mapInitialized && incidentes.isNotEmpty()) {
+                        val primero = incidentes.first()
+                        mv.controller.animateTo(GeoPoint(primero.latitud, primero.longitud))
+                        mapInitialized = true
+                    }
+
                     mv.overlays.clear()
                     incidentes.forEach { incidente ->
                         val marker = Marker(mv).apply {
@@ -307,6 +317,15 @@ private fun IncidenteMapaOSM(
                             title = incidente.tipo
                             snippet = incidente.descripcion
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                            setOnMarkerClickListener { m, _ ->
+                                if (m.isInfoWindowOpen) {
+                                    onNavigateToDetalle(incidente.id)
+                                } else {
+                                    m.showInfoWindow()
+                                    mv.controller.animateTo(m.position)
+                                }
+                                true
+                            }
                         }
                         mv.overlays.add(marker)
                     }

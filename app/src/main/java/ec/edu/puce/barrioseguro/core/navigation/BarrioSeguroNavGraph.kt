@@ -105,6 +105,9 @@ fun BarrioSeguroNavGraph() {
                         launchSingleTop = true
                         restoreState = true
                     }
+                },
+                onNavigateToDetalle = { incidenteId ->
+                    navController.navigate(DetalleRoute(incidenteId))
                 }
             )
         }

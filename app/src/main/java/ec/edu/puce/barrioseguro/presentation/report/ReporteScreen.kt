@@ -8,27 +8,34 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
@@ -42,6 +49,8 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -59,8 +68,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -71,7 +82,18 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import ec.edu.puce.barrioseguro.domain.model.Incidente
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModel
 import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModelFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.MapEventsOverlay
+import org.osmdroid.events.MapEventsReceiver
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import java.io.File
+
+private const val QUITO_LAT = -0.2295
+private const val QUITO_LON = -78.5243
 
 val TIPOS_INCIDENTE = listOf(
     "Robo",
@@ -79,10 +101,6 @@ val TIPOS_INCIDENTE = listOf(
     "Vandalismo",
     "Asunto de seguridad pública"
 )
-
-// ---------------------------------------------------------------------------
-// Entrada pública — firma fija para el NavGraph
-// ---------------------------------------------------------------------------
 
 @Composable
 fun ReporteScreen(
@@ -95,16 +113,15 @@ fun ReporteScreen(
         factory = IncidenteViewModelFactory()
     )
 
-    // ── Estado del formulario ────────────────────────────────────────────────
+    // Formulario state (String-based coordinates for stable text fields editing)
     var tipo by rememberSaveable { mutableStateOf("") }
     var descripcion by rememberSaveable { mutableStateOf("") }
     var fotoUri by rememberSaveable { mutableStateOf<Uri?>(null) }
-    var latitud by remember { mutableStateOf<Double?>(null) }
-    var longitud by remember { mutableStateOf<Double?>(null) }
+    var latitudStr by rememberSaveable { mutableStateOf("") }
+    var longitudStr by rememberSaveable { mutableStateOf("") }
     var ubicacionError by remember { mutableStateOf<String?>(null) }
+    var isFormEditable by rememberSaveable { mutableStateOf(true) }
 
-    // URI temporal preparada antes de abrir la cámara, almacenada en caché privada
-    // (no ocupa memoria RAM ni requiere permisos de almacenamiento externo).
     val fotoFileUri = remember {
         val fotoFile = File(context.cacheDir, "foto_incidente_${System.currentTimeMillis()}.jpg")
         FileProvider.getUriForFile(
@@ -114,24 +131,26 @@ fun ReporteScreen(
         )
     }
 
-    // ── Launcher de cámara con TakePicture (URI real, alta calidad) ──────────
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
-        // success == true significa que el usuario tomó la foto y se guardó en fotoFileUri.
         if (success) fotoUri = fotoFileUri
     }
 
-    // ── Launcher de permiso de cámara ────────────────────────────────────────
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) cameraLauncher.launch(fotoFileUri)
     }
 
-    // ── Cliente de ubicación ─────────────────────────────────────────────────
     val fusedLocationClient = remember {
         LocationServices.getFusedLocationProviderClient(context)
+    }
+
+    fun aplicarFallbackQuito(razon: String) {
+        latitudStr = QUITO_LAT.toString()
+        longitudStr = QUITO_LON.toString()
+        ubicacionError = "📍 $razon Se usará Quito como ubicación por defecto."
     }
 
     @SuppressLint("MissingPermission")
@@ -142,14 +161,14 @@ fun ReporteScreen(
             cts.token
         ).addOnSuccessListener { location: Location? ->
             if (location != null) {
-                latitud = location.latitude
-                longitud = location.longitude
+                latitudStr = location.latitude.toString()
+                longitudStr = location.longitude.toString()
                 ubicacionError = null
             } else {
-                ubicacionError = "No se pudo obtener la ubicación. Intenta de nuevo."
+                aplicarFallbackQuito("GPS sin señal.")
             }
         }.addOnFailureListener {
-            ubicacionError = "Error al obtener ubicación: ${it.message}"
+            aplicarFallbackQuito("Error de GPS: ${it.message}.")
         }
     }
 
@@ -158,11 +177,13 @@ fun ReporteScreen(
     ) { permissions ->
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (granted) obtenerUbicacion()
-        else ubicacionError = "Permiso de ubicación denegado."
+        if (granted) {
+            obtenerUbicacion()
+        } else {
+            aplicarFallbackQuito("Permiso de ubicación denegado.")
+        }
     }
 
-    // ── Solicitar ubicación al abrir la pantalla ─────────────────────────────
     LaunchedEffect(Unit) {
         val fineGranted = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION
@@ -187,11 +208,15 @@ fun ReporteScreen(
         tipo = tipo,
         descripcion = descripcion,
         fotoUri = fotoUri,
-        latitud = latitud,
-        longitud = longitud,
+        latitudStr = latitudStr,
+        longitudStr = longitudStr,
         ubicacionError = ubicacionError,
+        isFormEditable = isFormEditable,
+        onToggleEditable = { isFormEditable = it },
         onTipoChange = { tipo = it },
         onDescripcionChange = { descripcion = it },
+        onLatitudChange = { latitudStr = it },
+        onLongitudChange = { longitudStr = it },
         onTomarFotoClick = {
             val cameraGranted = ContextCompat.checkSelfPermission(
                 context, Manifest.permission.CAMERA
@@ -200,13 +225,15 @@ fun ReporteScreen(
             else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         },
         onEnviarClick = {
+            val lat = latitudStr.toDoubleOrNull() ?: 0.0
+            val lon = longitudStr.toDoubleOrNull() ?: 0.0
             val incidente = Incidente(
                 id = 0,
                 tipo = tipo,
                 descripcion = descripcion,
-                latitud = latitud ?: 0.0,
-                longitud = longitud ?: 0.0,
-                fotoUri = fotoUri?.toString(), // URI real persistida como String
+                latitud = lat,
+                longitud = lon,
+                fotoUri = fotoUri?.toString(),
                 timestamp = System.currentTimeMillis(),
                 estado = "activo"
             )
@@ -219,21 +246,21 @@ fun ReporteScreen(
     )
 }
 
-// ---------------------------------------------------------------------------
-// Scaffold principal
-// ---------------------------------------------------------------------------
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReporteScaffold(
     tipo: String,
     descripcion: String,
     fotoUri: Uri?,
-    latitud: Double?,
-    longitud: Double?,
+    latitudStr: String,
+    longitudStr: String,
     ubicacionError: String?,
+    isFormEditable: Boolean,
+    onToggleEditable: (Boolean) -> Unit,
     onTipoChange: (String) -> Unit,
     onDescripcionChange: (String) -> Unit,
+    onLatitudChange: (String) -> Unit,
+    onLongitudChange: (String) -> Unit,
     onTomarFotoClick: () -> Unit,
     onEnviarClick: () -> Unit,
     onNavigateBack: () -> Unit,
@@ -241,37 +268,56 @@ private fun ReporteScaffold(
     onNavigateToProfile: () -> Unit
 ) {
     Scaffold(
+        containerColor = Color(0xFF121212),
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = "Reportar Incidente",
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Volver"
+                            contentDescription = "Volver",
+                            tint = Color.White
                         )
                     }
                 },
                 actions = {
-                    IconButton(onClick = { }) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
                         Icon(
-                            imageVector = Icons.Filled.Notifications,
-                            contentDescription = "Notificaciones"
+                            imageVector = if (isFormEditable) Icons.Filled.Edit else Icons.Filled.Lock,
+                            contentDescription = if (isFormEditable) "Editable" else "Bloqueado",
+                            tint = if (isFormEditable) Color(0xFFE53935) else Color.Gray,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Switch(
+                            checked = isFormEditable,
+                            onCheckedChange = onToggleEditable,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFFE53935),
+                                checkedTrackColor = Color(0xFFE53935).copy(alpha = 0.5f),
+                                uncheckedThumbColor = Color.Gray,
+                                uncheckedTrackColor = Color(0xFF333333)
+                            )
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = Color(0xFF121212)
                 )
             )
         },
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+            NavigationBar(containerColor = Color(0xFF121212)) {
                 NavigationBarItem(
                     selected = false,
                     onClick = onNavigateBack,
@@ -291,28 +337,26 @@ private fun ReporteScaffold(
                     label = { Text("Perfil") }
                 )
             }
-        },
-        containerColor = MaterialTheme.colorScheme.background
+        }
     ) { paddingValues ->
         ReporteForm(
             modifier = Modifier.padding(paddingValues),
             tipo = tipo,
             descripcion = descripcion,
             fotoUri = fotoUri,
-            latitud = latitud,
-            longitud = longitud,
+            latitudStr = latitudStr,
+            longitudStr = longitudStr,
             ubicacionError = ubicacionError,
+            isFormEditable = isFormEditable,
             onTipoChange = onTipoChange,
             onDescripcionChange = onDescripcionChange,
+            onLatitudChange = onLatitudChange,
+            onLongitudChange = onLongitudChange,
             onTomarFotoClick = onTomarFotoClick,
             onEnviarClick = onEnviarClick
         )
     }
 }
-
-// ---------------------------------------------------------------------------
-// Formulario principal
-// ---------------------------------------------------------------------------
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -321,15 +365,20 @@ private fun ReporteForm(
     tipo: String,
     descripcion: String,
     fotoUri: Uri?,
-    latitud: Double?,
-    longitud: Double?,
+    latitudStr: String,
+    longitudStr: String,
     ubicacionError: String?,
+    isFormEditable: Boolean,
     onTipoChange: (String) -> Unit,
     onDescripcionChange: (String) -> Unit,
+    onLatitudChange: (String) -> Unit,
+    onLongitudChange: (String) -> Unit,
     onTomarFotoClick: () -> Unit,
     onEnviarClick: () -> Unit
 ) {
-    val formularioValido = tipo.isNotBlank() && descripcion.isNotBlank()
+    val latValid = latitudStr.toDoubleOrNull() != null
+    val lonValid = longitudStr.toDoubleOrNull() != null
+    val formularioValido = isFormEditable && tipo.isNotBlank() && descripcion.isNotBlank() && latValid && lonValid
 
     Column(
         modifier = modifier
@@ -338,22 +387,42 @@ private fun ReporteForm(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // ── 1. Área de foto ──────────────────────────────────────────────────
+        // ── 1. Bloque de bloqueo (Banner Informativo) ──
+        if (!isFormEditable) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF2C1A1A), RoundedCornerShape(8.dp))
+                    .border(1.dp, Color(0xFFE53935), RoundedCornerShape(8.dp))
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = "🔒 El formulario está bloqueado para edición. Activa el interruptor superior para modificar.",
+                    color = Color(0xFFEF9A9A),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        // ── 2. Área de foto ──────────────────────────────────────────────────
         FotoSection(
             fotoUri = fotoUri,
+            isFormEditable = isFormEditable,
             onTomarFotoClick = onTomarFotoClick
         )
 
-        // ── 2. Dropdown de tipo de incidente ───────────────────────────────
+        // ── 3. Dropdown de tipo de incidente ───────────────────────────────
         var expanded by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = it }
+            expanded = expanded && isFormEditable,
+            onExpandedChange = { if (isFormEditable) expanded = it }
         ) {
             OutlinedTextField(
                 value = tipo,
                 onValueChange = {},
                 readOnly = true,
+                enabled = isFormEditable,
                 placeholder = {
                     Text("Seleccionar tipo de incidente", color = Color.Gray)
                 },
@@ -364,7 +433,7 @@ private fun ReporteForm(
                 shape = RoundedCornerShape(8.dp)
             )
             ExposedDropdownMenu(
-                expanded = expanded,
+                expanded = expanded && isFormEditable,
                 onDismissRequest = { expanded = false }
             ) {
                 TIPOS_INCIDENTE.forEach { opcion ->
@@ -379,10 +448,11 @@ private fun ReporteForm(
             }
         }
 
-        // ── 3. Descripción ──────────────────────────────────────────────────
+        // ── 4. Descripción ──────────────────────────────────────────────────
         OutlinedTextField(
             value = descripcion,
             onValueChange = onDescripcionChange,
+            enabled = isFormEditable,
             placeholder = { Text("Describe el incidente...", color = Color.Gray) },
             minLines = 3,
             maxLines = 6,
@@ -390,14 +460,139 @@ private fun ReporteForm(
             shape = RoundedCornerShape(8.dp)
         )
 
-        // ── 4. Ubicación GPS ────────────────────────────────────────────────
-        UbicacionSection(
-            latitud = latitud,
-            longitud = longitud,
-            ubicacionError = ubicacionError
-        )
+        // ── 5. Ubicación GPS editable ──────────────────────────────────────
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = latitudStr,
+                onValueChange = onLatitudChange,
+                enabled = isFormEditable,
+                label = { Text("Latitud") },
+                isError = latitudStr.isNotEmpty() && !latValid,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp)
+            )
+            OutlinedTextField(
+                value = longitudStr,
+                onValueChange = onLongitudChange,
+                enabled = isFormEditable,
+                label = { Text("Longitud") },
+                isError = longitudStr.isNotEmpty() && !lonValid,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp)
+            )
+        }
 
-        // ── 5. Botón Enviar ──────────────────────────────────────────────────
+        // ── 6. Mapa de Selección de Ubicación Exacta ──
+        val latDouble = latitudStr.toDoubleOrNull() ?: QUITO_LAT
+        val lonDouble = longitudStr.toDoubleOrNull() ?: QUITO_LON
+        val geoPointActual = remember(latDouble, lonDouble) { GeoPoint(latDouble, lonDouble) }
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Seleccionar ubicación exacta (toca el mapa)",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = Color.White
+            )
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
+            ) {
+                var formMapViewRef by remember { mutableStateOf<MapView?>(null) }
+                
+                DisposableEffect(Unit) {
+                    onDispose {
+                        formMapViewRef?.onPause()
+                        formMapViewRef?.onDetach()
+                        formMapViewRef = null
+                    }
+                }
+
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        MapView(ctx).apply {
+                            setMultiTouchControls(true)
+                            zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
+                            controller.setZoom(15.0)
+                            controller.setCenter(geoPointActual)
+                            
+                            val receiver = object : MapEventsReceiver {
+                                override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
+                                    if (isFormEditable) {
+                                        onLatitudChange(p.latitude.toString())
+                                        onLongitudChange(p.longitude.toString())
+                                    }
+                                    return true
+                                }
+                                override fun longPressHelper(p: GeoPoint): Boolean {
+                                    return false
+                                }
+                            }
+                            overlays.add(MapEventsOverlay(receiver))
+                            
+                            onResume()
+                        }.also { formMapViewRef = it }
+                    },
+                    update = { mv ->
+                        mv.overlays.clear()
+                        
+                        val receiver = object : MapEventsReceiver {
+                            override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
+                                if (isFormEditable) {
+                                    onLatitudChange(p.latitude.toString())
+                                    onLongitudChange(p.longitude.toString())
+                                }
+                                return true
+                            }
+                            override fun longPressHelper(p: GeoPoint): Boolean {
+                                return false
+                            }
+                        }
+                        mv.overlays.add(MapEventsOverlay(receiver))
+
+                        val marker = Marker(mv).apply {
+                            position = geoPointActual
+                            title = "Ubicación del incidente"
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                        }
+                        mv.overlays.add(marker)
+                        
+                        mv.controller.setCenter(geoPointActual)
+                        mv.invalidate()
+                    }
+                )
+            }
+        }
+
+        // Mensaje de error/info de ubicación
+        if (ubicacionError != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = Color(0xFF3E3618),
+                        shape = RoundedCornerShape(6.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = ubicacionError,
+                    color = Color(0xFFFFF59D),
+                    fontSize = 12.sp
+                )
+            }
+        }
+
+        // ── 7. Botón Enviar ──────────────────────────────────────────────────
         Button(
             onClick = onEnviarClick,
             enabled = formularioValido,
@@ -413,7 +608,7 @@ private fun ReporteForm(
             )
         ) {
             Text(
-                text = "Enviar Reporte",
+                text = if (isFormEditable) "Enviar Reporte" else "🔒 Edición bloqueada",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -421,13 +616,10 @@ private fun ReporteForm(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Sección de foto — usa Coil AsyncImage para cargar la URI sin bloquear el hilo
-// ---------------------------------------------------------------------------
-
 @Composable
 private fun FotoSection(
     fotoUri: Uri?,
+    isFormEditable: Boolean,
     onTomarFotoClick: () -> Unit
 ) {
     Box(
@@ -435,13 +627,11 @@ private fun FotoSection(
             .fillMaxWidth()
             .height(200.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFE0E0E0))
-            .clickable { onTomarFotoClick() },
+            .background(Color(0xFF2A2A2A))
+            .clickable(enabled = isFormEditable) { onTomarFotoClick() },
         contentAlignment = Alignment.Center
     ) {
         if (fotoUri != null) {
-            // Coil carga la imagen de forma asíncrona, comprimida y cacheada en disco —
-            // no se carga el Bitmap completo en RAM.
             AsyncImage(
                 model = fotoUri,
                 contentDescription = "Foto del incidente",
@@ -456,53 +646,15 @@ private fun FotoSection(
                 Icon(
                     imageVector = Icons.Filled.CameraAlt,
                     contentDescription = null,
-                    tint = Color.DarkGray,
+                    tint = Color.Gray,
                     modifier = Modifier.size(48.dp)
                 )
                 Text(
                     text = "Toca para añadir una foto",
-                    color = Color.DarkGray,
+                    color = Color.Gray,
                     fontSize = 14.sp
                 )
             }
         }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Sección de ubicación GPS
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun UbicacionSection(
-    latitud: Double?,
-    longitud: Double?,
-    ubicacionError: String?
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Icon(
-            imageVector = Icons.Filled.LocationOn,
-            contentDescription = null,
-            tint = Color(0xFFE53935),
-            modifier = Modifier.size(20.dp)
-        )
-        val textoUbicacion = when {
-            latitud != null && longitud != null ->
-                "%.5f, %.5f".format(latitud, longitud)
-            ubicacionError != null -> ubicacionError
-            else -> "Obteniendo ubicación..."
-        }
-        Text(
-            text = textoUbicacion,
-            color = Color.DarkGray,
-            fontSize = 14.sp
-        )
     }
 }

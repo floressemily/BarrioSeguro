@@ -69,6 +69,14 @@ import ec.edu.puce.barrioseguro.presentation.common.IncidenteUiState
 import ec.edu.puce.barrioseguro.domain.model.Incidente
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.viewinterop.AndroidView
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
 
 @Composable
 fun DetalleScreen(
@@ -83,19 +91,39 @@ fun DetalleScreen(
 
     val uiState by viewModel.uiState.collectAsState()
 
-    when (val state = uiState) {
-        is IncidenteUiState.Loading -> {
+    // ── Simulador de latencia REST (1.5s) ──
+    var isLoadingSimulated by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        delay(1_500L)
+        isLoadingSimulated = false
+    }
+
+    val showLoading = isLoadingSimulated || uiState is IncidenteUiState.Loading
+
+    when {
+        showLoading -> {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color(0xFF121212)),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = Color(0xFFE53935))
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(color = Color(0xFFE53935))
+                    Text(
+                        text = "Cargando detalle del incidente…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White
+                    )
+                }
             }
         }
 
-        is IncidenteUiState.Error -> {
+        uiState is IncidenteUiState.Error -> {
+            val errorState = uiState as IncidenteUiState.Error
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -104,19 +132,22 @@ fun DetalleScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = state.message,
+                    text = errorState.message,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
         }
 
-        is IncidenteUiState.Success -> {
+        uiState is IncidenteUiState.Success -> {
             DetalleScaffold(
-                incidente = state.data,
+                incidente = (uiState as IncidenteUiState.Success).data,
                 onNavigateBack = onNavigateBack,
                 onNavigateToMap = onNavigateToMap,
-                onNavigateToProfile = onNavigateToProfile
+                onNavigateToProfile = onNavigateToProfile,
+                onEstadoChange = { nuevoEstado ->
+                    viewModel.actualizarEstado(nuevoEstado)
+                }
             )
         }
     }
@@ -128,7 +159,8 @@ private fun DetalleScaffold(
     incidente: Incidente,
     onNavigateBack: () -> Unit,
     onNavigateToMap: () -> Unit,
-    onNavigateToProfile: () -> Unit
+    onNavigateToProfile: () -> Unit,
+    onEstadoChange: (String) -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -208,6 +240,12 @@ private fun DetalleScaffold(
                 scope.launch {
                     snackbarHostState.showSnackbar("Alerta guardada")
                 }
+            },
+            onEstadoChange = { nuevoEstado ->
+                onEstadoChange(nuevoEstado)
+                scope.launch {
+                    snackbarHostState.showSnackbar("Estado actualizado a: $nuevoEstado")
+                }
             }
         )
     }
@@ -218,7 +256,8 @@ private fun DetalleBody(
     incidente: Incidente,
     paddingValues: PaddingValues,
     onCompartir: () -> Unit,
-    onSeguirAlerta: () -> Unit
+    onSeguirAlerta: () -> Unit,
+    onEstadoChange: (String) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -307,7 +346,7 @@ private fun DetalleBody(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Quito, Ecuador",
+                        text = "Lat: %.4f, Lon: %.4f".format(incidente.latitud, incidente.longitud),
                         fontSize = 13.sp,
                         color = Color.Gray
                     )
@@ -344,7 +383,59 @@ private fun DetalleBody(
                 )
             }
 
-            // SECCIÓN ESTADO
+            // SECCIÓN MAPA DE UBICACIÓN
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Ubicación en mapa",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp,
+                    color = Color.White
+                )
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
+                ) {
+                    var miniMapViewRef by remember { mutableStateOf<MapView?>(null) }
+                    
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            miniMapViewRef?.onPause()
+                            miniMapViewRef?.onDetach()
+                            miniMapViewRef = null
+                        }
+                    }
+
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { ctx ->
+                            MapView(ctx).apply {
+                                setMultiTouchControls(true)
+                                zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
+                                controller.setZoom(15.5)
+                                controller.setCenter(GeoPoint(incidente.latitud, incidente.longitud))
+                                onResume()
+                            }.also { miniMapViewRef = it }
+                        },
+                        update = { mv ->
+                            mv.overlays.clear()
+                            val marker = Marker(mv).apply {
+                                position = GeoPoint(incidente.latitud, incidente.longitud)
+                                title = incidente.tipo
+                                snippet = incidente.descripcion
+                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                            }
+                            mv.overlays.add(marker)
+                            mv.controller.setCenter(GeoPoint(incidente.latitud, incidente.longitud))
+                            mv.invalidate()
+                        }
+                    )
+                }
+            }
+
+            // SECCIÓN ESTADO (INTERACTIVA)
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     text = "Estado",
@@ -353,38 +444,34 @@ private fun DetalleBody(
                     color = Color.White
                 )
 
-                val indiceActual = when {
-                    incidente.estado.contains("resuelto", ignoreCase = true) -> 2
-                    incidente.estado.contains("revision", ignoreCase = true) ||
-                    incidente.estado.contains("revisión", ignoreCase = true) -> 1
-                    else -> 0
-                }
-
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    val estados = listOf("Reportado", "En revisión", "Resuelto")
-                    estados.forEachIndexed { index, texto ->
-                        val esActual = index == indiceActual
-                        val esPasado = index < indiceActual
+                    val estados = listOf("Reportado", "En revisión", "Resuelto", "En alerta")
+                    estados.forEach { texto ->
+                        val esActual = when (texto) {
+                            "Reportado" -> incidente.estado.contains("reportado", ignoreCase = true) || incidente.estado.contains("activo", ignoreCase = true) || incidente.estado.isEmpty()
+                            "En revisión" -> incidente.estado.contains("revision", ignoreCase = true) || incidente.estado.contains("revisión", ignoreCase = true)
+                            "Resuelto" -> incidente.estado.contains("resuelto", ignoreCase = true)
+                            "En alerta" -> incidente.estado.contains("alerta", ignoreCase = true)
+                            else -> false
+                        }
 
-                        val bgColor = when {
-                            esActual -> Color(0xFFE53935)
-                            esPasado -> Color(0xFF3A3A3A)
-                            else -> Color.Transparent
-                        }
-                        val textColor = when {
-                            esActual -> Color.White
-                            esPasado -> Color.Gray
-                            else -> Color.LightGray
-                        }
+                        val bgColor = if (esActual) Color(0xFFE53935) else Color(0xFF2A2A2A)
+                        val textColor = if (esActual) Color.White else Color.Gray
+                        
                         val modifierBox = Modifier
                             .background(bgColor, RoundedCornerShape(20.dp))
                             .then(
-                                if (!esActual && !esPasado) Modifier.border(1.dp, Color.Gray, RoundedCornerShape(20.dp))
+                                if (!esActual) Modifier.border(1.dp, Color.Gray, RoundedCornerShape(20.dp))
                                 else Modifier
                             )
+                            .clickable {
+                                if (!esActual) {
+                                    onEstadoChange(texto)
+                                }
+                            }
                             .padding(horizontal = 12.dp, vertical = 6.dp)
 
                         Box(modifier = modifierBox) {
