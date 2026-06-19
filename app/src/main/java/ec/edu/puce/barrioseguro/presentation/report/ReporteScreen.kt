@@ -1,44 +1,83 @@
 package ec.edu.puce.barrioseguro.presentation.report
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.location.Location
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import ec.edu.puce.barrioseguro.domain.model.Incidente
+import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModel
+import ec.edu.puce.barrioseguro.presentation.viewmodel.IncidenteViewModelFactory
+
+val TIPOS_INCIDENTE = listOf(
+    "Robo",
+    "Actividad sospechosa",
+    "Vandalismo",
+    "Asunto de seguridad pública"
+)
 
 // ---------------------------------------------------------------------------
 // Entrada pública — firma fija para el NavGraph
@@ -48,27 +87,118 @@ import androidx.compose.ui.unit.dp
 fun ReporteScreen(
     onNavigateBack: () -> Unit
 ) {
+    val context = LocalContext.current
+    val viewModel: IncidenteViewModel = viewModel(
+        factory = IncidenteViewModelFactory()
+    )
+
+    // ── Estado del formulario ────────────────────────────────────────────────
     var tipo by rememberSaveable { mutableStateOf("") }
     var descripcion by rememberSaveable { mutableStateOf("") }
-    var latitud by rememberSaveable { mutableStateOf("") }
-    var longitud by rememberSaveable { mutableStateOf("") }
+    var fotoBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var latitud by remember { mutableStateOf<Double?>(null) }
+    var longitud by remember { mutableStateOf<Double?>(null) }
+    var ubicacionError by remember { mutableStateOf<String?>(null) }
 
-    val latitudValida = latitud.toDoubleOrNull() != null || latitud.isBlank()
-    val longitudValida = longitud.toDoubleOrNull() != null || longitud.isBlank()
+    // ── Launcher de cámara ───────────────────────────────────────────────────
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        fotoBitmap = bitmap
+    }
 
-    ReporteContent(
+    // ── Launcher de permiso de cámara ────────────────────────────────────────
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) cameraLauncher.launch(null)
+    }
+
+    // ── Launcher de permiso de ubicación ────────────────────────────────────
+    val fusedLocationClient = remember {
+        LocationServices.getFusedLocationProviderClient(context)
+    }
+
+    @SuppressLint("MissingPermission")
+    fun obtenerUbicacion() {
+        val cts = CancellationTokenSource()
+        fusedLocationClient.getCurrentLocation(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            cts.token
+        ).addOnSuccessListener { location: Location? ->
+            if (location != null) {
+                latitud = location.latitude
+                longitud = location.longitude
+                ubicacionError = null
+            } else {
+                ubicacionError = "No se pudo obtener la ubicación. Intenta de nuevo."
+            }
+        }.addOnFailureListener {
+            ubicacionError = "Error al obtener ubicación: ${it.message}"
+        }
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) obtenerUbicacion()
+        else ubicacionError = "Permiso de ubicación denegado."
+    }
+
+    // ── Solicitar ubicación al abrir la pantalla ─────────────────────────────
+    LaunchedEffect(Unit) {
+        val fineGranted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (fineGranted || coarseGranted) {
+            obtenerUbicacion()
+        } else {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
+
+    ReporteScaffold(
         tipo = tipo,
         descripcion = descripcion,
+        fotoBitmap = fotoBitmap,
         latitud = latitud,
         longitud = longitud,
-        latitudValida = latitudValida,
-        longitudValida = longitudValida,
+        ubicacionError = ubicacionError,
         onTipoChange = { tipo = it },
         onDescripcionChange = { descripcion = it },
-        onLatitudChange = { latitud = it },
-        onLongitudChange = { longitud = it },
-        onGuardarClick = onNavigateBack,
-        onCancelarClick = onNavigateBack
+        onTomarFotoClick = {
+            val cameraGranted = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
+            if (cameraGranted) cameraLauncher.launch(null)
+            else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        },
+        onEnviarClick = {
+            val incidente = Incidente(
+                id = 0,
+                tipo = tipo,
+                descripcion = descripcion,
+                latitud = latitud ?: 0.0,
+                longitud = longitud ?: 0.0,
+                fotoUri = null,
+                timestamp = System.currentTimeMillis(),
+                estado = "activo"
+            )
+            viewModel.guardarIncidente(incidente)
+            onNavigateBack()
+        },
+        onNavigateBack = onNavigateBack
     )
 }
 
@@ -78,240 +208,240 @@ fun ReporteScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReporteContent(
+private fun ReporteScaffold(
     tipo: String,
     descripcion: String,
-    latitud: String,
-    longitud: String,
-    latitudValida: Boolean,
-    longitudValida: Boolean,
+    fotoBitmap: Bitmap?,
+    latitud: Double?,
+    longitud: Double?,
+    ubicacionError: String?,
     onTipoChange: (String) -> Unit,
     onDescripcionChange: (String) -> Unit,
-    onLatitudChange: (String) -> Unit,
-    onLongitudChange: (String) -> Unit,
-    onGuardarClick: () -> Unit,
-    onCancelarClick: () -> Unit
+    onTomarFotoClick: () -> Unit,
+    onEnviarClick: () -> Unit,
+    onNavigateBack: () -> Unit
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            text = "Nuevo reporte",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Incidente comunitario",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Text(
+                        text = "Reportar Incidente",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver"
                         )
                     }
                 },
-                navigationIcon = {
-                    IconButton(onClick = onCancelarClick) {
+                actions = {
+                    IconButton(onClick = { }) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Volver",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            imageVector = Icons.Filled.Notifications,
+                            contentDescription = "Notificaciones"
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             )
+        },
+        bottomBar = {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateBack,
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "Inicio") },
+                    label = { Text("Inicio") }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = { },
+                    icon = { Icon(Icons.Filled.Map, contentDescription = "Mapa") },
+                    label = { Text("Mapa") }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = { },
+                    icon = { Icon(Icons.Filled.Person, contentDescription = "Perfil") },
+                    label = { Text("Perfil") }
+                )
+            }
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         ReporteForm(
-            paddingValues = paddingValues,
+            modifier = Modifier.padding(paddingValues),
             tipo = tipo,
             descripcion = descripcion,
+            fotoBitmap = fotoBitmap,
             latitud = latitud,
             longitud = longitud,
-            latitudValida = latitudValida,
-            longitudValida = longitudValida,
+            ubicacionError = ubicacionError,
             onTipoChange = onTipoChange,
             onDescripcionChange = onDescripcionChange,
-            onLatitudChange = onLatitudChange,
-            onLongitudChange = onLongitudChange,
-            onGuardarClick = onGuardarClick,
-            onCancelarClick = onCancelarClick
+            onTomarFotoClick = onTomarFotoClick,
+            onEnviarClick = onEnviarClick
         )
     }
 }
 
 // ---------------------------------------------------------------------------
-// Formulario Stateless
+// Formulario principal
 // ---------------------------------------------------------------------------
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReporteForm(
-    paddingValues: PaddingValues,
+    modifier: Modifier = Modifier,
     tipo: String,
     descripcion: String,
-    latitud: String,
-    longitud: String,
-    latitudValida: Boolean,
-    longitudValida: Boolean,
+    fotoBitmap: Bitmap?,
+    latitud: Double?,
+    longitud: Double?,
+    ubicacionError: String?,
     onTipoChange: (String) -> Unit,
     onDescripcionChange: (String) -> Unit,
-    onLatitudChange: (String) -> Unit,
-    onLongitudChange: (String) -> Unit,
-    onGuardarClick: () -> Unit,
-    onCancelarClick: () -> Unit
+    onTomarFotoClick: () -> Unit,
+    onEnviarClick: () -> Unit
 ) {
-    val formularioValido = tipo.isNotBlank() &&
-            descripcion.isNotBlank() &&
-            latitudValida &&
-            longitudValida
+    val formularioValido = tipo.isNotBlank() && descripcion.isNotBlank()
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
-            .padding(paddingValues)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Encabezado de sección
-        Text(
-            text = "Datos del incidente",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = "Formulario preparado para integrarse con Room y validaciones del dominio.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        // ── 1. Área de foto ──────────────────────────────────────────────────
+        FotoSection(
+            fotoBitmap = fotoBitmap,
+            onTomarFotoClick = onTomarFotoClick
         )
 
-        // Campos principales
-        OutlinedTextField(
-            value = tipo,
-            onValueChange = onTipoChange,
-            label = { Text("Tipo de incidente") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium
-        )
+        // ── 2. Dropdown de tipo de incidente ───────────────────────────────
+        var expanded by remember { mutableStateOf(false) }
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it }
+        ) {
+            OutlinedTextField(
+                value = tipo,
+                onValueChange = {},
+                readOnly = true,
+                placeholder = {
+                    Text("Seleccionar tipo de incidente", color = Color.Gray)
+                },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(),
+                shape = RoundedCornerShape(8.dp)
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                TIPOS_INCIDENTE.forEach { opcion ->
+                    DropdownMenuItem(
+                        text = { Text(opcion) },
+                        onClick = {
+                            onTipoChange(opcion)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
 
+        // ── 3. Descripción ──────────────────────────────────────────────────
         OutlinedTextField(
             value = descripcion,
             onValueChange = onDescripcionChange,
-            label = { Text("Descripción") },
+            placeholder = { Text("Describe el incidente...", color = Color.Gray) },
             minLines = 3,
+            maxLines = 6,
             modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium
+            shape = RoundedCornerShape(8.dp)
         )
 
-        // Sección de ubicación
-        UbicacionHeader()
+        // ── 4. Ubicación GPS ────────────────────────────────────────────────
+        UbicacionSection(
+            latitud = latitud,
+            longitud = longitud,
+            ubicacionError = ubicacionError
+        )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OutlinedTextField(
-                value = latitud,
-                onValueChange = onLatitudChange,
-                label = { Text("Latitud") },
-                isError = !latitudValida,
-                supportingText = {
-                    if (!latitudValida) Text("Número inválido")
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-                shape = MaterialTheme.shapes.medium
-            )
-
-            OutlinedTextField(
-                value = longitud,
-                onValueChange = onLongitudChange,
-                label = { Text("Longitud") },
-                isError = !longitudValida,
-                supportingText = {
-                    if (!longitudValida) Text("Número inválido")
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-                shape = MaterialTheme.shapes.medium
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Botones de acción
+        // ── 5. Botón Enviar ──────────────────────────────────────────────────
         Button(
-            onClick = onGuardarClick,
+            onClick = onEnviarClick,
             enabled = formularioValido,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-            ),
-            shape = MaterialTheme.shapes.medium
-        ) {
-            Text(
-                text = "Guardar borrador",
-                style = MaterialTheme.typography.labelLarge
+                containerColor = Color(0xFFE53935),
+                disabledContainerColor = Color(0xFFE53935).copy(alpha = 0.5f),
+                contentColor = Color.White,
+                disabledContentColor = Color.White
             )
-        }
-
-        OutlinedButton(
-            onClick = onCancelarClick,
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium
         ) {
             Text(
-                text = "Cancelar",
-                style = MaterialTheme.typography.labelLarge
+                text = "Enviar Reporte",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
             )
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Componente de sección de ubicación
+// Sección de foto
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun UbicacionHeader() {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = Modifier.fillMaxWidth()
+private fun FotoSection(
+    fotoBitmap: Bitmap?,
+    onTomarFotoClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFE0E0E0))
+            .clickable { onTomarFotoClick() },
+        contentAlignment = Alignment.Center
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Filled.LocationOn,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.size(20.dp)
+        if (fotoBitmap != null) {
+            Image(
+                bitmap = fotoBitmap.asImageBitmap(),
+                contentDescription = "Foto del incidente",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
             )
-            Column {
-                Text(
-                    text = "Ubicación del incidente",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
+        } else {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CameraAlt,
+                    contentDescription = null,
+                    tint = Color.DarkGray,
+                    modifier = Modifier.size(48.dp)
                 )
                 Text(
-                    text = "Coordenadas GPS o estimadas manualmente",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                    text = "Toca para añadir una foto",
+                    color = Color.DarkGray,
+                    fontSize = 14.sp
                 )
             }
         }
@@ -319,25 +449,38 @@ private fun UbicacionHeader() {
 }
 
 // ---------------------------------------------------------------------------
-// Preview
+// Sección de ubicación GPS
 // ---------------------------------------------------------------------------
 
-@Preview(showBackground = true, name = "Reporte - Modo claro")
 @Composable
-private fun ReporteScreenPreview() {
-    MaterialTheme {
-        ReporteScreen(onNavigateBack = {})
-    }
-}
-
-@Preview(
-    showBackground = true,
-    name = "Reporte - Modo oscuro",
-    uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES
-)
-@Composable
-private fun ReporteScreenDarkPreview() {
-    MaterialTheme {
-        ReporteScreen(onNavigateBack = {})
+private fun UbicacionSection(
+    latitud: Double?,
+    longitud: Double?,
+    ubicacionError: String?
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Filled.LocationOn,
+            contentDescription = null,
+            tint = Color(0xFFE53935),
+            modifier = Modifier.size(20.dp)
+        )
+        val textoUbicacion = when {
+            latitud != null && longitud != null -> "Quito, Ecuador"
+            ubicacionError != null -> ubicacionError
+            else -> "Obteniendo ubicación..."
+        }
+        Text(
+            text = textoUbicacion,
+            color = Color.DarkGray,
+            fontSize = 14.sp
+        )
     }
 }
