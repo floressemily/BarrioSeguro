@@ -12,3 +12,4 @@ object ReporteRoute
 data class DetalleRoute(
     val incidenteId: Int
 )
+
